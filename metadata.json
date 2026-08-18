@@ -1,0 +1,6 @@
+{
+  "name": "Enterprise Data Integration & Migration Platform (EDIMP)",
+  "description": "An AI-powered, metadata-driven enterprise platform for data extraction, profiling, validation, transformation, mapping, migration, and synchronization across ERP, CRM, and database systems.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
