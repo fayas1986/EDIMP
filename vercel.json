@@ -1,0 +1,17 @@
+{
+  "version": 2,
+  "buildCommand": "npx prisma generate --schema=packages/database/prisma/schema.prisma && npm run build",
+  "outputDirectory": "apps/web/dist",
+  "functions": {
+    "apps/api/api/index.ts": {
+      "memory": 1024,
+      "maxDuration": 15
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/v1/:path*",
+      "destination": "/apps/api/api/index"
+    }
+  ]
+}
