@@ -1,0 +1,1562 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ---------------------------------------------------------
+// ENUMS
+// ---------------------------------------------------------
+
+enum TenantRole {
+  ADMIN
+  MEMBER
+  BILLING
+}
+
+enum WorkspaceRole {
+  OWNER
+  EDITOR
+  VIEWER
+}
+
+enum EnvironmentStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum ConnectorCategory {
+  ERP
+  CRM
+  DATABASE
+  API
+  FILE
+  CLOUD_STORAGE
+  DATA_WAREHOUSE
+}
+
+enum ConnectorDirection {
+  SOURCE
+  TARGET
+  BOTH
+}
+
+enum ConnectorStatus {
+  ACTIVE
+  DEPRECATED
+  SUNSET
+}
+
+enum ConnectionStatus {
+  ACTIVE
+  INACTIVE
+  TESTING
+  ERROR
+}
+
+enum DataModelVersionStatus {
+  DRAFT
+  PUBLISHED
+  SUPERSEDED
+}
+
+enum CanonicalModelVersionStatus {
+  DRAFT
+  PUBLISHED
+  SUPERSEDED
+}
+
+enum MappingDirection {
+  SOURCE_TO_CANONICAL
+  CANONICAL_TO_TARGET
+}
+
+enum MappingVersionStatus {
+  DRAFT
+  PUBLISHED
+  SUPERSEDED
+}
+
+enum ProfileRunStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum ProfileMetricType {
+  RECORD_COUNT
+  NULL_COUNT
+  DISTINCT_COUNT
+  DUPLICATE_COUNT
+  MIN_VALUE
+  MAX_VALUE
+  DATA_TYPE_DISTRIBUTION
+  FORMAT_DISTRIBUTION
+}
+
+enum CredentialType {
+  OAUTH
+  BASIC
+  API_KEY
+  BEARER_TOKEN
+}
+
+enum DataType {
+  STRING
+  INTEGER
+  FLOAT
+  BOOLEAN
+  DATETIME
+  JSON
+  UNKNOWN
+}
+
+enum TransformType {
+  DIRECT
+  CONSTANT
+  LOOKUP
+  CONDITIONAL
+  EXPRESSION
+  CUSTOM_TRANSFORM
+}
+
+enum TransformationVersionStatus {
+  DRAFT
+  PUBLISHED
+  SUPERSEDED
+}
+
+enum ValidationVersionStatus {
+  DRAFT
+  PUBLISHED
+  SUPERSEDED
+}
+
+enum RuleType {
+  NOT_NULL
+  REGEX
+  RANGE
+  TYPE_CHECK
+  ENUM_MATCH
+}
+
+enum Severity {
+  ERROR
+  WARNING
+}
+
+enum PipelineJobStatus {
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum ExecutionRunStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum LogLevel {
+  INFO
+  WARN
+  ERROR
+  DEBUG
+}
+
+// ---------------------------------------------------------
+// PHASE 1: IDENTITY, TENANCY, & ENVIRONMENTS
+// ---------------------------------------------------------
+
+model Tenant {
+  id        String    @id @default(cuid())
+  name      String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  workspaces Workspace[]
+  members    TenantMember[]
+}
+
+model User {
+  id        String    @id @default(cuid())
+  email     String    @unique
+  name      String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  tenantMembers                  TenantMember[]
+  workspaceMembers               WorkspaceMember[]
+  publishedCanonicalVersions      CanonicalModelVersion[]
+  publishedMappingVersions        MappingVersion[]
+  publishedTransformationVersions TransformationVersion[]
+  publishedValidationVersions     ValidationVersion[]
+  publishedMigrationConfigs       MigrationConfigurationVersion[]
+  assignedRecordErrors            RecordError[]                         @relation("AssignedErrorUser")
+  resolvedRecordErrors            RecordError[]                         @relation("ResolvedErrorUser")
+  publishedReconConfigs           ReconciliationConfigurationVersion[] @relation("ReconPubUser")
+  errorOverrides                  ErrorManualOverride[]                 @relation("OverrideUser")
+  errorResolutionLogs             ErrorResolutionLog[]                  @relation("ResolutionLogUser")
+  aiQuerySessions                 AiQuerySession[]
+  aiMappingSuggestionsAccepted   AiMappingSuggestion[]                @relation("MappingAcceptedBy")
+  aiMappingSuggestionsRejected   AiMappingSuggestion[]                @relation("MappingRejectedBy")
+  aiDriftSuggestionsApproved     AiDriftRepairSuggestion[]            @relation("DriftApprovedBy")
+  aiAnomalyAnalysesReviewed      AiAnomalyAnalysis[]                  @relation("AnomalyReviewedBy")
+}
+
+model TenantMember {
+  id        String     @id @default(cuid())
+  tenantId  String
+  userId    String
+  role      TenantRole
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, userId])
+  @@index([userId])
+}
+
+model Workspace {
+  id        String    @id @default(cuid())
+  tenantId  String
+  name      String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  tenant            Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  environments      Environment[]
+  members           WorkspaceMember[]
+  canonicalModels   CanonicalModel[]
+  mappingSets       MappingSet[]
+  transformationSets TransformationSet[]
+  validationSets    ValidationSet[]
+  pipelineJobs        PipelineJob[]
+  migrationJobs       MigrationJob[]
+  reconciliationJobs  ReconciliationJob[]
+  aiAgentTasks        AiAgentTask[]
+  aiMappingSuggestions AiMappingSuggestion[]
+  aiDriftSuggestions  AiDriftRepairSuggestion[]
+  aiAnomalyAnalyses   AiAnomalyAnalysis[]
+  aiQuerySessions     AiQuerySession[]
+  auditLogs           AuditLog[]
+
+  @@index([tenantId])
+}
+
+model WorkspaceMember {
+  id          String        @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        WorkspaceRole
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+model Environment {
+  id          String            @id @default(cuid())
+  workspaceId String
+  name        String
+  status      EnvironmentStatus @default(ACTIVE)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  deletedAt   DateTime?
+
+  workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  connections        Connection[]
+  pipelineJobs       PipelineJob[]
+  migrationJobs      MigrationJob[]
+  reconciliationJobs ReconciliationJob[]
+  aiAgentTasks       AiAgentTask[]
+  aiQuerySessions    AiQuerySession[]
+
+  @@index([workspaceId])
+}
+
+// ---------------------------------------------------------
+// PHASE 2: CONNECTORS, DATA MODELS & PROFILING
+// ---------------------------------------------------------
+
+model ConnectorType {
+  id           String             @id @default(cuid())
+  name         String             @unique
+  category     ConnectorCategory
+  version      String             @default("1.0.0")
+  direction    ConnectorDirection @default(BOTH)
+  status       ConnectorStatus    @default(ACTIVE)
+  capabilities Json
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  connections Connection[]
+}
+
+model Connection {
+  id              String           @id @default(cuid())
+  environmentId   String
+  connectorTypeId String
+  name            String
+  description     String?
+  status          ConnectionStatus @default(ACTIVE)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  deletedAt       DateTime?
+
+  environment   Environment          @relation(fields: [environmentId], references: [id], onDelete: Restrict)
+  connectorType          ConnectorType                    @relation(fields: [connectorTypeId], references: [id], onDelete: Restrict)
+  credential             CredentialReference?
+  dataModels             DataModel[]
+  sourceMigrationConfigs MigrationConfigurationVersion[]      @relation("SourceConnection")
+  targetMigrationConfigs MigrationConfigurationVersion[]      @relation("TargetConnection")
+  reconSourceConfigs     ReconciliationConfigurationVersion[] @relation("ReconSourceConn")
+  reconTargetConfigs     ReconciliationConfigurationVersion[] @relation("ReconTargetConn")
+
+  @@index([connectorTypeId])
+}
+
+model CredentialReference {
+  id             String         @id @default(cuid())
+  connectionId   String         @unique
+  credentialType CredentialType
+  vaultPath      String
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  connection Connection @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+}
+
+model DataModel {
+  id           String    @id @default(cuid())
+  connectionId String
+  name         String
+  description  String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  connection Connection         @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+  versions   DataModelVersion[]
+}
+
+model DataModelVersion {
+  id          String                 @id @default(cuid())
+  dataModelId String
+  version     Int
+  status      DataModelVersionStatus @default(DRAFT)
+  createdAt   DateTime               @default(now())
+
+  dataModel              DataModel                        @relation(fields: [dataModelId], references: [id], onDelete: Restrict)
+  entities               DataEntity[]
+  profiles               DataProfileRun[]
+  mappingVersions        MappingVersion[]
+  sourceMigrationConfigs MigrationConfigurationVersion[]      @relation("SourceDataModelVersion")
+  targetMigrationConfigs MigrationConfigurationVersion[]      @relation("TargetDataModelVersion")
+  reconSourceConfigs     ReconciliationConfigurationVersion[] @relation("ReconSourceDMV")
+  reconTargetConfigs     ReconciliationConfigurationVersion[] @relation("ReconTargetDMV")
+  aiSourceMappingSuggestions AiMappingSuggestion[]             @relation("SourceDataModelVer")
+  aiTargetMappingSuggestions AiMappingSuggestion[]             @relation("TargetDataModelVer")
+  aiBaselineDriftSuggestions AiDriftRepairSuggestion[]        @relation("BaselineDataModelVer")
+  aiTargetDriftSuggestions   AiDriftRepairSuggestion[]        @relation("TargetDataModelVer")
+
+  @@unique([dataModelId, version])
+}
+
+model DataEntity {
+  id                 String   @id @default(cuid())
+  dataModelVersionId String
+  name               String
+  description        String?
+  createdAt          DateTime @default(now())
+
+  dataModelVersion     DataModelVersion    @relation(fields: [dataModelVersionId], references: [id], onDelete: Restrict)
+  fields               DataField[]
+  metrics              DataProfileMetric[]
+  sourceEntityMappings EntityMapping[]     @relation("SourceEntityMapping")
+  targetEntityMappings EntityMapping[]     @relation("TargetEntityMapping")
+
+  @@unique([dataModelVersionId, name])
+}
+
+model DataField {
+  id           String   @id @default(cuid())
+  dataEntityId String
+  name         String
+  dataType     DataType @default(UNKNOWN)
+  isNullable   Boolean  @default(true)
+  isPrimaryKey Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  dataEntity          DataEntity          @relation(fields: [dataEntityId], references: [id], onDelete: Cascade)
+  metrics             DataProfileMetric[]
+  sourceFieldMappings FieldMapping[]      @relation("SourceFieldMapping")
+  targetFieldMappings FieldMapping[]      @relation("TargetFieldMapping")
+
+  @@unique([dataEntityId, name])
+}
+
+model DataProfileRun {
+  id                 String           @id @default(cuid())
+  dataModelVersionId String
+  queuedAt           DateTime         @default(now())
+  startedAt          DateTime?
+  completedAt        DateTime?
+  status             ProfileRunStatus @default(QUEUED)
+  createdAt          DateTime         @default(now())
+
+  dataModelVersion DataModelVersion    @relation(fields: [dataModelVersionId], references: [id], onDelete: Restrict)
+  metrics          DataProfileMetric[]
+
+  @@index([dataModelVersionId, status])
+}
+
+model DataProfileMetric {
+  id               String            @id @default(cuid())
+  dataProfileRunId String
+  dataEntityId     String?
+  dataFieldId      String?
+  metricType       ProfileMetricType
+  metricValue      Json
+  snapshotName     String?
+  createdAt        DateTime          @default(now())
+
+  dataProfileRun DataProfileRun @relation(fields: [dataProfileRunId], references: [id], onDelete: Cascade)
+  dataEntity     DataEntity?    @relation(fields: [dataEntityId], references: [id], onDelete: Restrict)
+  dataField      DataField?     @relation(fields: [dataFieldId], references: [id], onDelete: Restrict)
+
+  @@index([dataProfileRunId])
+  @@index([dataProfileRunId, metricType])
+  @@index([dataEntityId])
+  @@index([dataFieldId])
+}
+
+// ---------------------------------------------------------
+// PHASE 3: CANONICAL MODELS & MAPPING ENGINE
+// ---------------------------------------------------------
+
+model CanonicalModel {
+  id          String    @id @default(cuid())
+  workspaceId String
+  name        String
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  workspace Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  versions  CanonicalModelVersion[]
+
+  @@index([workspaceId])
+}
+
+model CanonicalModelVersion {
+  id                String                      @id @default(cuid())
+  canonicalModelId  String
+  version           Int
+  status            CanonicalModelVersionStatus @default(DRAFT)
+  definitionHash    String?
+  publishedAt       DateTime?
+  publishedByUserId String?
+  createdAt         DateTime                    @default(now())
+
+  canonicalModel  CanonicalModel   @relation(fields: [canonicalModelId], references: [id], onDelete: Restrict)
+  publishedByUser User?            @relation(fields: [publishedByUserId], references: [id], onDelete: Restrict)
+  entities        CanonicalEntity[]
+  mappingVersions MappingVersion[]
+  aiMappingSuggestions AiMappingSuggestion[]
+
+  @@unique([canonicalModelId, version])
+}
+
+model CanonicalEntity {
+  id                      String   @id @default(cuid())
+  canonicalModelVersionId String
+  name                    String
+  description             String?
+  createdAt               DateTime @default(now())
+
+  canonicalModelVersion CanonicalModelVersion @relation(fields: [canonicalModelVersionId], references: [id], onDelete: Cascade)
+  fields                CanonicalField[]
+  entityMappings        EntityMapping[]
+
+  @@unique([canonicalModelVersionId, name])
+}
+
+model CanonicalField {
+  id                String   @id @default(cuid())
+  canonicalEntityId String
+  name              String
+  dataType          DataType @default(UNKNOWN)
+  isNullable        Boolean  @default(true)
+  isPrimaryKey      Boolean  @default(false)
+  createdAt         DateTime @default(now())
+
+  canonicalEntity CanonicalEntity @relation(fields: [canonicalEntityId], references: [id], onDelete: Cascade)
+  fieldMappings   FieldMapping[]
+
+  @@unique([canonicalEntityId, name])
+}
+
+model MappingSet {
+  id          String           @id @default(cuid())
+  workspaceId String
+  name        String
+  description String?
+  direction   MappingDirection
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  deletedAt   DateTime?
+
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  versions  MappingVersion[]
+
+  @@index([workspaceId])
+}
+
+model MappingVersion {
+  id                      String               @id @default(cuid())
+  mappingSetId            String
+  canonicalModelVersionId String
+  dataModelVersionId      String
+  version                 Int
+  status                  MappingVersionStatus @default(DRAFT)
+  definitionHash          String?
+  publishedAt             DateTime?
+  publishedByUserId       String?
+  createdAt               DateTime             @default(now())
+
+  mappingSet            MappingSet            @relation(fields: [mappingSetId], references: [id], onDelete: Restrict)
+  canonicalModelVersion CanonicalModelVersion @relation(fields: [canonicalModelVersionId], references: [id], onDelete: Restrict)
+  dataModelVersion      DataModelVersion      @relation(fields: [dataModelVersionId], references: [id], onDelete: Restrict)
+  publishedByUser       User?                 @relation(fields: [publishedByUserId], references: [id], onDelete: Restrict)
+  entityMappings        EntityMapping[]
+  pipelineJobs          PipelineJob[]
+  migrationConfigs      MigrationConfigurationVersion[]
+  aiMappingSuggestions  AiMappingSuggestion[]
+
+  @@unique([mappingSetId, version])
+}
+
+model EntityMapping {
+  id                String   @id @default(cuid())
+  mappingVersionId  String
+  sourceEntityId    String?
+  canonicalEntityId String?
+  targetEntityId    String?
+  createdAt         DateTime @default(now())
+
+  mappingVersion  MappingVersion   @relation(fields: [mappingVersionId], references: [id], onDelete: Restrict)
+  sourceEntity    DataEntity?      @relation("SourceEntityMapping", fields: [sourceEntityId], references: [id], onDelete: Restrict)
+  canonicalEntity CanonicalEntity? @relation(fields: [canonicalEntityId], references: [id], onDelete: Restrict)
+  targetEntity    DataEntity?      @relation("TargetEntityMapping", fields: [targetEntityId], references: [id], onDelete: Restrict)
+  fieldMappings   FieldMapping[]
+
+  @@index([mappingVersionId])
+}
+
+model FieldMapping {
+  id               String        @id @default(cuid())
+  entityMappingId  String
+  sourceFieldId    String?
+  canonicalFieldId String?
+  targetFieldId    String?
+  transformType    TransformType @default(DIRECT)
+  config           Json          @default("{}")
+  createdAt        DateTime      @default(now())
+
+  entityMapping  EntityMapping   @relation(fields: [entityMappingId], references: [id], onDelete: Cascade)
+  sourceField    DataField?      @relation("SourceFieldMapping", fields: [sourceFieldId], references: [id], onDelete: Restrict)
+  canonicalField CanonicalField? @relation(fields: [canonicalFieldId], references: [id], onDelete: Restrict)
+  targetField    DataField?      @relation("TargetFieldMapping", fields: [targetFieldId], references: [id], onDelete: Restrict)
+
+  @@index([entityMappingId])
+}
+
+// ---------------------------------------------------------
+// PHASE 4: TRANSFORMATION, VALIDATION & EXECUTION ENGINE
+// ---------------------------------------------------------
+
+model TransformationSet {
+  id          String                  @id @default(cuid())
+  workspaceId String
+  name        String
+  description String?
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+  deletedAt   DateTime?
+
+  workspace Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  versions  TransformationVersion[]
+
+  @@index([workspaceId])
+}
+
+model TransformationVersion {
+  id                  String                      @id @default(cuid())
+  transformationSetId String
+  version             Int
+  status              TransformationVersionStatus @default(DRAFT)
+  definitionHash      String?
+  publishedAt         DateTime?
+  publishedByUserId   String?
+  createdAt           DateTime                    @default(now())
+
+  transformationSet    TransformationSet               @relation(fields: [transformationSetId], references: [id], onDelete: Restrict)
+  publishedByUser      User?                           @relation(fields: [publishedByUserId], references: [id], onDelete: Restrict)
+  fieldTransformations FieldTransformation[]
+  pipelineJobs         PipelineJob[]
+  migrationConfigs     MigrationConfigurationVersion[]
+
+  @@unique([transformationSetId, version])
+}
+
+model FieldTransformation {
+  id                      String                @id @default(cuid())
+  transformationVersionId String
+  targetFieldIdentifier   String
+  transformType           TransformType         @default(DIRECT)
+  config                  Json                  @default("{}")
+  createdAt               DateTime              @default(now())
+
+  transformationVersion TransformationVersion @relation(fields: [transformationVersionId], references: [id], onDelete: Cascade)
+
+  @@index([transformationVersionId])
+}
+
+model ValidationSet {
+  id          String              @id @default(cuid())
+  workspaceId String
+  name        String
+  description String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  deletedAt   DateTime?
+
+  workspace Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  versions  ValidationVersion[]
+
+  @@index([workspaceId])
+}
+
+model ValidationVersion {
+  id                String                          @id @default(cuid())
+  validationSetId   String
+  version           Int
+  status            ValidationVersionStatus         @default(DRAFT)
+  definitionHash    String?
+  publishedAt       DateTime?
+  publishedByUserId String?
+  createdAt         DateTime                        @default(now())
+
+  validationSet       ValidationSet                   @relation(fields: [validationSetId], references: [id], onDelete: Restrict)
+  publishedByUser     User?                           @relation(fields: [publishedByUserId], references: [id], onDelete: Restrict)
+  rules               FieldValidationRule[]
+  pipelineJobs        PipelineJob[]
+  migrationConfigs    MigrationConfigurationVersion[]
+
+  @@unique([validationSetId, version])
+}
+
+model FieldValidationRule {
+  id                    String            @id @default(cuid())
+  validationVersionId   String
+  targetFieldIdentifier String
+  ruleType              RuleType
+  ruleConfig            Json              @default("{}")
+  severity              Severity          @default(ERROR)
+  createdAt             DateTime          @default(now())
+
+  validationVersion ValidationVersion   @relation(fields: [validationVersionId], references: [id], onDelete: Cascade)
+
+  @@index([validationVersionId])
+}
+
+model PipelineJob {
+  id                      String            @id @default(cuid())
+  workspaceId             String
+  environmentId           String
+  mappingVersionId        String
+  transformationVersionId String
+  validationVersionId     String
+  name                    String
+  description             String?
+  status                  PipelineJobStatus @default(ACTIVE)
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+  deletedAt               DateTime?
+
+  workspace             Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  environment           Environment           @relation(fields: [environmentId], references: [id], onDelete: Restrict)
+  mappingVersion        MappingVersion        @relation(fields: [mappingVersionId], references: [id], onDelete: Restrict)
+  transformationVersion TransformationVersion @relation(fields: [transformationVersionId], references: [id], onDelete: Restrict)
+  validationVersion     ValidationVersion     @relation(fields: [validationVersionId], references: [id], onDelete: Restrict)
+  executionRuns         PipelineExecutionRun[]
+
+  @@index([workspaceId])
+  @@index([environmentId])
+}
+
+model PipelineExecutionRun {
+  id                          String             @id @default(cuid())
+  pipelineJobId               String
+  mappingVersionId            String
+  transformationVersionId     String
+  validationVersionId         String
+  mappingDefinitionHash       String?
+  transformationDefinitionHash String?
+  validationDefinitionHash    String?
+  status                      ExecutionRunStatus @default(QUEUED)
+  errorCode                   String?
+  errorMessage                String?
+  recordsProcessed            BigInt             @default(0)
+  recordsTransformed          BigInt             @default(0)
+  recordsValidated            BigInt             @default(0)
+  recordsValidationFailed     BigInt             @default(0)
+  recordsTransformationFailed BigInt             @default(0)
+  queuedAt                    DateTime           @default(now())
+  startedAt                   DateTime?
+  completedAt                 DateTime?
+  createdAt                   DateTime           @default(now())
+
+  pipelineJob PipelineJob            @relation(fields: [pipelineJobId], references: [id], onDelete: Restrict)
+  logs        PipelineExecutionLog[]
+
+  @@index([pipelineJobId])
+  @@index([status])
+}
+
+model PipelineExecutionLog {
+  id                     String               @id @default(cuid())
+  pipelineExecutionRunId String
+  level                  LogLevel             @default(INFO)
+  message                String
+  metadata               Json                 @default("{}")
+  createdAt              DateTime             @default(now())
+
+  executionRun PipelineExecutionRun          @relation(fields: [pipelineExecutionRunId], references: [id], onDelete: Cascade)
+
+  @@index([pipelineExecutionRunId])
+}
+
+// ---------------------------------------------------------
+// PHASE 5: MIGRATION ENGINE, FROZEN RECIPES & STABLE IDEMPOTENCY
+// ---------------------------------------------------------
+
+enum MigrationJobStatus {
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum MigrationConfigVersionStatus {
+  DRAFT
+  PUBLISHED
+  SUPERSEDED
+}
+
+enum MigrationRunStatus {
+  QUEUED
+  EXTRACTING
+  TRANSFORMING
+  LOADING
+  COMPLETED
+  FAILED
+  PAUSED
+  CANCELLED
+}
+
+enum BatchStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum RecordStatus {
+  EXTRACTED
+  TRANSFORMED
+  VALIDATED
+  LOADED
+  SKIPPED
+  FAILED
+}
+
+enum LoadOperation {
+  NONE
+  INSERT
+  UPDATE
+  UPSERT
+}
+
+enum LoadStrategy {
+  INSERT
+  UPDATE
+  UPSERT
+}
+
+enum ErrorCategory {
+  TRANSIENT
+  RATE_LIMIT
+  CONNECTIVITY
+  AUTHENTICATION
+  VALIDATION
+  MAPPING
+  TARGET_BUSINESS_RULE
+  PERMANENT
+}
+
+model MigrationJob {
+  id            String             @id @default(cuid())
+  workspaceId   String
+  environmentId String
+  name          String
+  description   String?
+  status        MigrationJobStatus @default(ACTIVE)
+  loadStrategy  LoadStrategy       @default(UPSERT)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  deletedAt     DateTime?
+
+  workspace      Workspace                       @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  environment    Environment                     @relation(fields: [environmentId], references: [id], onDelete: Restrict)
+  configurations MigrationConfigurationVersion[]
+
+  @@index([workspaceId])
+  @@index([environmentId])
+}
+
+model MigrationConfigurationVersion {
+  id                       String                       @id @default(cuid())
+  migrationJobId           String
+  version                  Int
+  status                   MigrationConfigVersionStatus @default(DRAFT)
+  sourceConnectionId       String
+  targetConnectionId       String
+  sourceDataModelVersionId String
+  targetDataModelVersionId String
+  mappingVersionId         String
+  transformationVersionId  String
+  validationVersionId      String
+  configurationHash        String?
+  publishedAt              DateTime?
+  publishedByUserId        String?
+  createdAt                DateTime                     @default(now())
+
+  migrationJob           MigrationJob          @relation(fields: [migrationJobId], references: [id], onDelete: Restrict)
+  sourceConnection       Connection            @relation("SourceConnection", fields: [sourceConnectionId], references: [id], onDelete: Restrict)
+  targetConnection       Connection            @relation("TargetConnection", fields: [targetConnectionId], references: [id], onDelete: Restrict)
+  sourceDataModelVersion DataModelVersion      @relation("SourceDataModelVersion", fields: [sourceDataModelVersionId], references: [id], onDelete: Restrict)
+  targetDataModelVersion DataModelVersion      @relation("TargetDataModelVersion", fields: [targetDataModelVersionId], references: [id], onDelete: Restrict)
+  mappingVersion         MappingVersion        @relation(fields: [mappingVersionId], references: [id], onDelete: Restrict)
+  transformationVersion  TransformationVersion @relation(fields: [transformationVersionId], references: [id], onDelete: Restrict)
+  validationVersion      ValidationVersion     @relation(fields: [validationVersionId], references: [id], onDelete: Restrict)
+  publishedByUser        User?                 @relation(fields: [publishedByUserId], references: [id], onDelete: Restrict)
+  
+  identities             MigrationIdentity[]
+  runs                   MigrationRun[]
+
+  @@unique([migrationJobId, version])
+}
+
+model MigrationIdentity {
+  id                              String        @id @default(cuid())
+  migrationConfigurationVersionId String
+  sourceConnectionId              String
+  sourceEntityIdentifier          String
+  sourceRecordId                  String
+  targetEntityIdentifier          String
+  idempotencyKey                  String        @unique
+  lastSourceRecordHash            String
+  lastTargetRecordId              String?
+  lastStatus                      RecordStatus  @default(EXTRACTED)
+  lastLoadOperation               LoadOperation @default(NONE)
+  createdAt                       DateTime      @default(now())
+  updatedAt                       DateTime      @updatedAt
+
+  migrationConfigVersion MigrationConfigurationVersion @relation(fields: [migrationConfigurationVersionId], references: [id], onDelete: Cascade)
+  records                MigrationRecord[]
+
+  @@index([migrationConfigurationVersionId])
+  @@index([sourceRecordId])
+}
+
+model MigrationRun {
+  id                               String             @id @default(cuid())
+  migrationConfigurationVersionId String
+  status                           MigrationRunStatus @default(QUEUED)
+  workerLeaseId                    String?
+  workerHeartbeatAt                DateTime?
+  leaseExpiresAt                   DateTime?
+  recordsExtracted                 BigInt             @default(0)
+  recordsProcessed                 BigInt             @default(0)
+  recordsTransformed               BigInt             @default(0)
+  recordsValidated                 BigInt             @default(0)
+  recordsLoaded                    BigInt             @default(0)
+  recordsInserted                  BigInt             @default(0)
+  recordsUpdated                   BigInt             @default(0)
+  recordsSkipped                   BigInt             @default(0)
+  recordsFailed                    BigInt             @default(0)
+  recordsRetried                   BigInt             @default(0)
+  batchesTotal                     Int                @default(0)
+  batchesCompleted                 Int                @default(0)
+  queuedAt                         DateTime           @default(now())
+  startedAt                        DateTime?
+  completedAt                      DateTime?
+  createdAt                        DateTime           @default(now())
+
+  migrationConfigVersion MigrationConfigurationVersion @relation(fields: [migrationConfigurationVersionId], references: [id], onDelete: Restrict)
+  batches                JobBatch[]
+  records                MigrationRecord[]
+  reconciliationRuns     ReconciliationRun[]
+
+  @@index([migrationConfigurationVersionId])
+  @@index([status])
+}
+
+model JobBatch {
+  id                String      @id @default(cuid())
+  migrationRunId    String
+  batchIndex        Int
+  status            BatchStatus @default(QUEUED)
+  recordCount       Int         @default(0)
+  processedCount    Int         @default(0)
+  failedCount       Int         @default(0)
+  checkpointCursor  String?
+  workerLeaseId     String?
+  workerHeartbeatAt DateTime?
+  leaseExpiresAt    DateTime?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime    @default(now())
+
+  migrationRun MigrationRun      @relation(fields: [migrationRunId], references: [id], onDelete: Restrict)
+  records      MigrationRecord[]
+
+  @@unique([migrationRunId, batchIndex])
+  @@index([status])
+}
+
+model MigrationRecord {
+  id                  String        @id @default(cuid())
+  migrationRunId      String
+  jobBatchId          String
+  migrationIdentityId String
+  sourceRecordHash    String
+  targetRecordId      String?
+  status              RecordStatus  @default(EXTRACTED)
+  loadOperation       LoadOperation @default(NONE)
+  attemptCount        Int           @default(1)
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  migrationRun      MigrationRun      @relation(fields: [migrationRunId], references: [id], onDelete: Cascade)
+  jobBatch          JobBatch          @relation(fields: [jobBatchId], references: [id], onDelete: Cascade)
+  migrationIdentity MigrationIdentity @relation(fields: [migrationIdentityId], references: [id], onDelete: Cascade)
+  errors            RecordError[]
+
+  @@index([migrationRunId])
+  @@index([jobBatchId])
+  @@index([migrationIdentityId])
+  @@index([status])
+}
+
+model RecordError {
+  id                   String                @id @default(cuid())
+  migrationRecordId   String
+  errorCategory        ErrorCategory         @default(PERMANENT)
+  errorCode            String
+  errorMessage         String
+  failedStage          String
+  sanitizedDiagnostics Json                  @default("{}")
+  resolutionStatus     ErrorResolutionStatus @default(OPEN)
+  assignedToUserId     String?
+  resolvedByUserId     String?
+  resolvedAt           DateTime?
+  createdAt            DateTime              @default(now())
+
+  migrationRecord MigrationRecord      @relation(fields: [migrationRecordId], references: [id], onDelete: Cascade)
+  assignedToUser  User?                @relation("AssignedErrorUser", fields: [assignedToUserId], references: [id], onDelete: Restrict)
+  resolvedByUser  User?                @relation("ResolvedErrorUser", fields: [resolvedByUserId], references: [id], onDelete: Restrict)
+  manualOverride  ErrorManualOverride?
+  resolutionLogs  ErrorResolutionLog[]
+
+  @@index([migrationRecordId])
+  @@index([errorCategory])
+  @@index([resolutionStatus])
+}
+
+// ---------------------------------------------------------
+// PHASE 6: RECONCILIATION & ERROR MANAGEMENT ENUMS
+// ---------------------------------------------------------
+
+enum ReconciliationMode {
+  FULL
+  INCREMENTAL
+  SAMPLED
+}
+
+enum ReconciliationConfigVersionStatus {
+  DRAFT
+  PUBLISHED
+  SUPERSEDED
+}
+
+enum ReconciliationRunStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum DiscrepancyType {
+  MISSING_IN_TARGET
+  ORPHAN_IN_TARGET
+  ATTRIBUTE_MISMATCH
+  RECORD_COUNT_MISMATCH
+  AGGREGATE_SUM_MISMATCH
+}
+
+enum DiscrepancyStatus {
+  OPEN
+  RESOLVED
+  IGNORED
+}
+
+enum ObservationState {
+  NEW
+  PERSISTED
+  RESOLVED
+}
+
+enum ErrorResolutionStatus {
+  OPEN
+  UNDER_INVESTIGATION
+  RESOLVED_REPLAYED
+  RESOLVED_MANUAL_OVERRIDE
+  IGNORED
+}
+
+enum ErrorResolutionAction {
+  INVESTIGATE
+  ASSIGN
+  MANUAL_OVERRIDE
+  REPLAY
+  IGNORE
+}
+
+// ---------------------------------------------------------
+// PHASE 6: RECONCILIATION & ERROR MANAGEMENT MODELS
+// ---------------------------------------------------------
+
+model ReconciliationJob {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  environmentId String
+  name          String
+  description   String?
+  status        String    @default("ACTIVE")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  workspace      Workspace                            @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  environment    Environment                          @relation(fields: [environmentId], references: [id], onDelete: Restrict)
+  configurations ReconciliationConfigurationVersion[]
+
+  @@index([workspaceId])
+  @@index([environmentId])
+}
+
+model ReconciliationConfigurationVersion {
+  id                       String                            @id @default(cuid())
+  reconciliationJobId      String
+  version                  Int
+  status                   ReconciliationConfigVersionStatus @default(DRAFT)
+  sourceConnectionId       String
+  targetConnectionId       String
+  sourceDataModelVersionId String
+  targetDataModelVersionId String
+  sourceEntityIdentifier   String                            @default("default_source_entity")
+  targetEntityIdentifier   String                            @default("default_target_entity")
+  identityMapping          Json                              @default("{}")
+  comparisonFields         Json                              @default("[]")
+  aggregateFields          Json                              @default("[]")
+  mode                     ReconciliationMode                @default(FULL)
+  samplingConfig           Json                              @default("{}")
+  watermarkConfig          Json                              @default("{}")
+  configurationHash        String?
+  publishedAt              DateTime?
+  publishedByUserId        String?
+  createdAt                DateTime                          @default(now())
+
+  reconciliationJob      ReconciliationJob    @relation(fields: [reconciliationJobId], references: [id], onDelete: Restrict)
+  sourceConnection       Connection           @relation("ReconSourceConn", fields: [sourceConnectionId], references: [id], onDelete: Restrict)
+  targetConnection       Connection           @relation("ReconTargetConn", fields: [targetConnectionId], references: [id], onDelete: Restrict)
+  sourceDataModelVersion DataModelVersion     @relation("ReconSourceDMV", fields: [sourceDataModelVersionId], references: [id], onDelete: Restrict)
+  targetDataModelVersion DataModelVersion     @relation("ReconTargetDMV", fields: [targetDataModelVersionId], references: [id], onDelete: Restrict)
+  publishedByUser        User?                @relation("ReconPubUser", fields: [publishedByUserId], references: [id], onDelete: Restrict)
+
+  runs          ReconciliationRun[]
+  discrepancies ReconciliationDiscrepancy[]
+
+  @@unique([reconciliationJobId, version])
+}
+
+model ReconciliationRun {
+  id                                   String                  @id @default(cuid())
+  reconciliationConfigurationVersionId String
+  migrationRunId                       String?
+  status                               ReconciliationRunStatus @default(QUEUED)
+  workerLeaseId                        String?
+  workerHeartbeatAt                    DateTime?
+  leaseExpiresAt                       DateTime?
+  totalRecordsCompared                 BigInt                  @default(0)
+  discrepanciesFound                   BigInt                  @default(0)
+  missingCount                         BigInt                  @default(0)
+  orphanCount                          BigInt                  @default(0)
+  attributeMismatchCount               BigInt                  @default(0)
+  aggregateMismatchCount               BigInt                  @default(0)
+  batchesTotal                         Int                     @default(0)
+  batchesCompleted                     Int                     @default(0)
+  startedAt                            DateTime?
+  completedAt                          DateTime?
+  createdAt                            DateTime                @default(now())
+
+  reconConfigVersion ReconciliationConfigurationVersion @relation(fields: [reconciliationConfigurationVersionId], references: [id], onDelete: Restrict)
+  migrationRun       MigrationRun?                      @relation(fields: [migrationRunId], references: [id], onDelete: SetNull)
+  batches            ReconciliationBatch[]
+  observations       ReconciliationObservation[]
+
+  @@index([reconciliationConfigurationVersionId])
+  @@index([status])
+}
+
+model ReconciliationBatch {
+  id                  String    @id @default(cuid())
+  reconciliationRunId String
+  batchIndex          Int
+  status              String    @default("QUEUED")
+  recordCount         Int       @default(0)
+  checkpointCursor    String?
+  startedAt           DateTime?
+  completedAt         DateTime?
+  createdAt           DateTime  @default(now())
+
+  reconciliationRun ReconciliationRun @relation(fields: [reconciliationRunId], references: [id], onDelete: Cascade)
+
+  @@unique([reconciliationRunId, batchIndex])
+}
+
+model ReconciliationDiscrepancy {
+  id                                   String            @id @default(cuid())
+  reconciliationConfigurationVersionId String
+  discrepancyIdentityKey               String            @unique // SHA256(configVersionId + sourceRecordId + targetRecordId + discrepancyType + fieldIdentifier)
+  sourceRecordId                       String?
+  targetRecordId                       String?
+  fieldIdentifier                      String?
+  discrepancyType                      DiscrepancyType
+  status                               DiscrepancyStatus @default(OPEN)
+  createdAt                            DateTime          @default(now())
+  updatedAt                            DateTime          @updatedAt
+
+  reconConfigVersion ReconciliationConfigurationVersion @relation(fields: [reconciliationConfigurationVersionId], references: [id], onDelete: Cascade)
+  observations       ReconciliationObservation[]
+  aiAnomalyAnalyses  AiAnomalyAnalysis[]
+
+  @@index([reconciliationConfigurationVersionId])
+  @@index([status])
+}
+
+model ReconciliationObservation {
+  id                          String           @id @default(cuid())
+  reconciliationDiscrepancyId String
+  reconciliationRunId         String
+  state                       ObservationState @default(NEW)
+  payloadDiff                 Json             @default("{}")
+  observedAt                  DateTime         @default(now())
+
+  discrepancy       ReconciliationDiscrepancy @relation(fields: [reconciliationDiscrepancyId], references: [id], onDelete: Cascade)
+  reconciliationRun ReconciliationRun         @relation(fields: [reconciliationRunId], references: [id], onDelete: Cascade)
+
+  @@index([reconciliationDiscrepancyId])
+  @@index([reconciliationRunId])
+}
+
+model ErrorManualOverride {
+  id                 String   @id @default(cuid())
+  recordErrorId      String   @unique
+  originalPayload    Json
+  overridePayload    Json
+  overrideReason     String
+  overriddenByUserId String
+  createdAt          DateTime @default(now())
+
+  recordError      RecordError @relation(fields: [recordErrorId], references: [id], onDelete: Cascade)
+  overriddenByUser User        @relation("OverrideUser", fields: [overriddenByUserId], references: [id], onDelete: Restrict)
+}
+
+model ErrorResolutionLog {
+  id                String                @id @default(cuid())
+  recordErrorId     String
+  action            ErrorResolutionAction
+  fromStatus        ErrorResolutionStatus
+  toStatus          ErrorResolutionStatus
+  performedByUserId String
+  details           Json                  @default("{}")
+  createdAt         DateTime              @default(now())
+
+  recordError     RecordError @relation(fields: [recordErrorId], references: [id], onDelete: Cascade)
+  performedByUser User        @relation("ResolutionLogUser", fields: [performedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([recordErrorId])
+}
+
+// ---------------------------------------------------------
+// PHASE 7: AI AGENTS & AUTONOMOUS SKILLS INTEGRATION
+// ---------------------------------------------------------
+
+enum AiAgentType {
+  MAPPING_SUGGESTION
+  SCHEMA_DRIFT_REPAIR
+  ANOMALY_DETECTION
+  NATURAL_LANGUAGE_QUERY
+}
+
+enum AiTaskStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum AiSuggestionStatus {
+  PROPOSED
+  NO_RECOMMENDATION
+  ACCEPTED
+  REJECTED
+  SUPERSEDED
+  STALE
+}
+
+enum DriftCategory {
+  ADDED_FIELD
+  REMOVED_FIELD
+  RENAME_CANDIDATE
+  TYPE_MUTATION
+  NULLABILITY_CHANGE
+  ENTITY_REMOVED
+}
+
+enum DriftSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AnomalyType {
+  NUMERIC_OUTLIER
+  PATTERN_MUTATION
+  NULL_SPIKE
+  TIMEZONE_OFFSET
+  CURRENCY_CONVERSION
+  TRUNCATION_RISK
+  INSUFFICIENT_BASELINE
+}
+
+model AiAgentTask {
+  id               String       @id @default(cuid())
+  workspaceId      String
+  environmentId    String
+  agentType        AiAgentType
+  status           AiTaskStatus @default(PENDING)
+  
+  agentVersion     String       @default("agent-v1.0")
+  algorithmVersion String       @default("algo-v1.0")
+  providerName     String       @default("DETERMINISTIC")
+  
+  inputHash        String       // SHA256(agentType + sourceVer + targetVer + profileRun + algoVer + config)
+  taskParameters   Json         // Sanitized input config
+  errorMessage     String?
+  executionTimeMs  Int?
+  
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  workspace        Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  environment      Environment  @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+  
+  mappingSuggestions AiMappingSuggestion[]
+  driftSuggestions   AiDriftRepairSuggestion[]
+  anomalyAnalyses    AiAnomalyAnalysis[]
+
+  @@index([workspaceId, environmentId])
+  @@index([inputHash])
+  @@index([agentType, status])
+}
+
+model AiMappingSuggestion {
+  id                    String             @id @default(cuid())
+  taskId                String
+  workspaceId           String
+  
+  sourceDataModelVerId  String?
+  targetDataModelVerId  String?
+  canonicalModelVerId   String?
+  mappingVersionId      String?
+  profileRunId          String?
+  
+  sourceEntity          String
+  sourceField           String
+  targetEntity          String
+  targetField           String?            // Null if NO_RECOMMENDATION
+  
+  suggestedTransform    String?
+  suggestedValidation   String?
+  
+  status                AiSuggestionStatus @default(PROPOSED)
+  
+  // Score Breakdown
+  nameScore             Float              @default(0.0)
+  semanticScore         Float              @default(0.0)
+  typeCompatibilityScore Float             @default(0.0)
+  profileScore          Float              @default(0.0)
+  finalConfidenceScore  Float              @default(0.0)
+  
+  reasoning             String             @db.Text
+  evidence              Json               @default("{}")
+  
+  agentVersion          String
+  algorithmVersion      String
+  
+  acceptedByUserId      String?
+  acceptedAt            DateTime?
+  newDraftMappingVerId  String?
+  
+  rejectedByUserId      String?
+  rejectedAt            DateTime?
+  rejectionReason       String?
+  
+  createdAt             DateTime           @default(now())
+
+  task                  AiAgentTask            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  workspace             Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sourceDataModelVer    DataModelVersion?      @relation("SourceDataModelVer", fields: [sourceDataModelVerId], references: [id], onDelete: SetNull)
+  targetDataModelVer    DataModelVersion?      @relation("TargetDataModelVer", fields: [targetDataModelVerId], references: [id], onDelete: SetNull)
+  canonicalModelVer     CanonicalModelVersion? @relation(fields: [canonicalModelVerId], references: [id], onDelete: SetNull)
+  mappingVersion        MappingVersion?        @relation(fields: [mappingVersionId], references: [id], onDelete: SetNull)
+  acceptedByUser        User?                  @relation("MappingAcceptedBy", fields: [acceptedByUserId], references: [id], onDelete: SetNull)
+  rejectedByUser        User?                  @relation("MappingRejectedBy", fields: [rejectedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([taskId])
+  @@index([status])
+}
+
+model AiDriftRepairSuggestion {
+  id                   String             @id @default(cuid())
+  taskId               String
+  workspaceId          String
+  
+  baselineModelVerId   String
+  targetModelVerId     String
+  
+  entityName           String
+  fieldName            String?
+  renamedToFieldName   String?
+  
+  category             DriftCategory
+  severity             DriftSeverity
+  status               AiSuggestionStatus @default(PROPOSED)
+  
+  confidenceScore      Float
+  reasoning            String             @db.Text
+  suggestedRepairPlan  Json               @default("{}")
+  
+  agentVersion         String
+  algorithmVersion     String
+  
+  approvedByUserId     String?
+  approvedAt           DateTime?
+  createdDraftVersionId String?
+  
+  createdAt            DateTime           @default(now())
+
+  task                 AiAgentTask        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  workspace            Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  baselineModelVer     DataModelVersion   @relation("BaselineDataModelVer", fields: [baselineModelVerId], references: [id], onDelete: Cascade)
+  targetModelVer       DataModelVersion   @relation("TargetDataModelVer", fields: [targetModelVerId], references: [id], onDelete: Cascade)
+  approvedByUser       User?              @relation("DriftApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([taskId])
+  @@index([category, severity])
+}
+
+model AiAnomalyAnalysis {
+  id                          String                     @id @default(cuid())
+  taskId                      String
+  workspaceId                 String
+  
+  reconciliationDiscrepancyId String?
+  dataProfileRunId            String?
+  
+  anomalyType                 AnomalyType
+  status                      AiSuggestionStatus         @default(PROPOSED)
+  confidenceScore             Float
+  
+  // Statistical Evidence
+  sampleSize                  Int?
+  meanValue                   Float?
+  stdDevValue                 Float?
+  medianValue                 Float?
+  iqrValue                    Float?
+  zScoreValue                 Float?
+  thresholdUsed               Float?
+  statisticalEvidence         Json                       @default("{}")
+  
+  rootCauseAnalysis           String                     @db.Text
+  recommendedAction           String                     
+  
+  agentVersion                String
+  algorithmVersion            String
+  
+  reviewedByUserId            String?
+  reviewedAt                  DateTime?
+  
+  createdAt                   DateTime                   @default(now())
+
+  task                        AiAgentTask                @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  workspace                   Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  reconciliationDiscrepancy    ReconciliationDiscrepancy? @relation(fields: [reconciliationDiscrepancyId], references: [id], onDelete: SetNull)
+  reviewedByUser              User?                      @relation("AnomalyReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([taskId])
+  @@index([anomalyType])
+}
+
+model AiQuerySession {
+  id            String           @id @default(cuid())
+  workspaceId   String
+  environmentId String
+  userId        String
+  title         String
+  
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  workspace     Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  environment   Environment      @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  messages      AiQueryMessage[]
+
+  @@index([workspaceId, userId])
+}
+
+model AiQueryMessage {
+  id               String         @id @default(cuid())
+  sessionId        String
+  sender           String         
+  naturalText      String         @db.Text
+  
+  queryPlanJson    Json?          
+  isReadOnly       Boolean        @default(true)
+  executionError   String?
+  resultSummary    Json?
+  
+  agentVersion     String?
+  algorithmVersion String?
+  
+  createdAt        DateTime       @default(now())
+
+  session          AiQuerySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+}
+
+// ---------------------------------------------------------
+// PHASE 8: OBSERVABILITY, AUDIT & WORKER CLUSTER MODELS
+// ---------------------------------------------------------
+
+enum WorkerStatus {
+  ACTIVE
+  IDLE
+  LEASE_EXPIRED
+  DRAINING
+  STOPPED
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  PUBLISH
+  EXECUTE
+  OVERRIDE
+  REPLAY
+  ACCEPT_SUGGESTION
+  REJECT_SUGGESTION
+}
+
+model WorkerNode {
+  id               String       @id @default(cuid())
+  workerId         String       @unique
+  hostname         String
+  ipAddress        String?
+  status           WorkerStatus @default(ACTIVE)
+  lastHeartbeatAt  DateTime     @default(now())
+  activeLeaseCount Int          @default(0)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@index([status])
+  @@index([lastHeartbeatAt])
+}
+
+model AuditLog {
+  id            String      @id @default(cuid())
+  tenantId      String?
+  workspaceId   String?
+  environmentId String?
+  userId        String?
+  action        AuditAction
+  resourceType  String
+  resourceId    String?
+  traceId       String?
+  ipAddress     String?
+  userAgent     String?
+  details       Json        @default("{}")
+  createdAt     DateTime    @default(now())
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([workspaceId, createdAt])
+  @@index([resourceType, resourceId])
+  @@index([action, createdAt])
+  @@index([traceId])
+}
+
+
+

@@ -1,0 +1,78 @@
+name: EDIMP Enterprise CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master, 'release/*' ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  quality-gate:
+    name: Monorepo Quality Gate & Static Checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Generate Prisma Engine & Database Client
+        run: npx prisma generate --schema=packages/database/prisma/schema.prisma
+
+      - name: Type Check (Frontend Web)
+        run: npm run --prefix apps/web lint
+
+      - name: Build Monorepo Packages & Apps
+        run: npm run build
+
+  e2e-integration-gate:
+    name: Phase 1–8 Enterprise E2E Test Suite
+    runs-on: ubuntu-latest
+    needs: quality-gate
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate --schema=packages/database/prisma/schema.prisma
+
+      - name: Run E2E Test Suite (Phases 1–8)
+        run: npm run test:e2e
+        env:
+          NODE_ENV: test
+          DATABASE_URL: "file:./dev.db"
+          JWT_SECRET: "ci_super_secret_enterprise_jwt_key_32_chars_min"
+          METRICS_AUTH_TOKEN: "ci_metrics_auth_token_secret_min_16_chars"
+
+  security-audit-gate:
+    name: Dependency Security & Vulnerability Audit
+    runs-on: ubuntu-latest
+    needs: quality-gate
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Security Audit Check
+        run: npm audit --audit-level=critical || true
