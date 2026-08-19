@@ -6,7 +6,8 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "turbo run build",
+    "db:generate": "npm run --prefix packages/database generate",
+    "build": "npm run db:generate && turbo run build",
     "dev": "turbo run dev",
     "lint": "npm run --prefix apps/web lint",
     "typecheck": "npm run --prefix apps/web lint",
