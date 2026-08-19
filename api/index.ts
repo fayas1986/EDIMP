@@ -2,8 +2,8 @@ import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { ExpressAdapter } from '@nestjs/platform-express';
 import { ZodValidationPipe } from 'nestjs-zod';
 import express from 'express';
-import { AppModule } from '../src/app.module';
-import { PrismaClientExceptionFilter } from '../src/common/filters/prisma-client-exception.filter';
+import { AppModule } from '../apps/api/src/app.module';
+import { PrismaClientExceptionFilter } from '../apps/api/src/common/filters/prisma-client-exception.filter';
 
 const server = express();
 
