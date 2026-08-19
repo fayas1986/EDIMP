@@ -189,13 +189,18 @@ describe('Phase 7: AI Agents & Autonomous Skills Integration (E2E)', () => {
       expect(res.body.inputHash).toBeDefined();
       taskId = res.body.id;
 
-      // Wait 100ms for async worker execution
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      const taskDetails = await prisma.aiAgentTask.findUnique({
+      // Poll up to 2500ms for async worker execution
+      let taskDetails = await prisma.aiAgentTask.findUnique({
         where: { id: taskId },
         include: { mappingSuggestions: true },
       });
+      for (let i = 0; i < 25 && taskDetails?.status !== 'COMPLETED'; i++) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        taskDetails = await prisma.aiAgentTask.findUnique({
+          where: { id: taskId },
+          include: { mappingSuggestions: true },
+        });
+      }
 
       expect(taskDetails?.status).toBe('COMPLETED');
       expect(taskDetails?.mappingSuggestions.length).toBeGreaterThan(0);
