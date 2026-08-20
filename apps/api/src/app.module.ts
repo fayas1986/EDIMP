@@ -27,10 +27,15 @@ import { WorkerClusterModule } from './worker-cluster/worker-cluster.module';
 import { TraceInterceptor } from './observability/trace.interceptor';
 import { RateLimiterGuard } from './common/guards/rate-limiter.guard';
 
+import { AuthModule } from './common/auth/auth.module';
+import { SecretsModule } from './common/secrets/secrets.module';
+
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
+    AuthModule,
+    SecretsModule,
     TenantsModule,
     WorkspacesModule,
     EnvironmentsModule,

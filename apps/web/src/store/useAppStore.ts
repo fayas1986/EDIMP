@@ -30,7 +30,7 @@ export const useAppStore = create<AppState>((set, get) => {
   const initialJobs = offlineCacheService.getCachedJobs() || MOCK_MIGRATION_JOBS;
 
   // Initialize Auth
-  const isAuth = localStorage.getItem('edimp_is_authenticated') !== 'false';
+  const isAuth = localStorage.getItem('edimp_is_authenticated') === 'true';
   const savedUserId = localStorage.getItem('edimp_user_id');
   const matchedUser = MOCK_ALL_USERS.find((u) => u.id === savedUserId);
   const initialUser = matchedUser || MOCK_ALL_USERS[0];

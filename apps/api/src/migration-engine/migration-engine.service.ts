@@ -36,6 +36,8 @@ import * as crypto from 'crypto';
 
 @Injectable()
 export class MigrationEngineService {
+  private readonly migrationQueue: any = null;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly canonicalJsonService: CanonicalJsonService,
@@ -257,12 +259,16 @@ export class MigrationEngineService {
       },
     });
 
-    // Execute background pipeline asynchronously
-    setImmediate(() => {
-      this.executeRunPipeline(run.id, dto).catch(err => {
-        console.error(`MigrationRun ${run.id} pipeline execution error:`, err);
+    // Enqueue migration job for worker execution
+    if (this.migrationQueue) {
+      await this.migrationQueue.add('execute-migration-run', { runId: run.id, dto });
+    } else {
+      setImmediate(() => {
+        this.executeRunPipeline(run.id, dto).catch(err => {
+          console.error(`MigrationRun ${run.id} pipeline execution error:`, err);
+        });
       });
-    });
+    }
 
     return this.serializeRun(run);
   }

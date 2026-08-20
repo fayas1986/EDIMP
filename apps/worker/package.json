@@ -1,0 +1,37 @@
+{
+  "name": "@edimp/worker",
+  "version": "0.0.1",
+  "description": "EDIMP Execution Worker Process",
+  "private": true,
+  "license": "UNLICENSED",
+  "scripts": {
+    "build": "nest build",
+    "start": "nest start",
+    "start:dev": "nest start --watch",
+    "start:prod": "node dist/main",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@edimp/connector-sdk": "^1.0.0",
+    "@edimp/contracts": "^1.0.0",
+    "@edimp/database": "^1.0.0",
+    "@nestjs/bullmq": "^11.0.1",
+    "@nestjs/common": "^11.0.1",
+    "@nestjs/config": "^4.0.4",
+    "@nestjs/core": "^11.0.1",
+    "bullmq": "^5.41.7",
+    "ioredis": "^5.6.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^11.0.0",
+    "@nestjs/schematics": "^11.0.0",
+    "@nestjs/testing": "^11.0.1",
+    "@types/node": "^24.0.0",
+    "jest": "^30.0.0",
+    "ts-jest": "^29.2.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.3"
+  }
+}
