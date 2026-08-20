@@ -425,7 +425,7 @@ interface DiscoveryViewProps {
 
 export const DiscoveryView: React.FC<DiscoveryViewProps> = ({ onProceedToMapping, connectors }) => {
   const allConnectors = useMemo(() => {
-    return connectors || INITIAL_CONNECTORS;
+    return connectors && connectors.length > 0 ? connectors : INITIAL_CONNECTORS;
   }, [connectors]);
 
   const allDatasets = useMemo(() => {
@@ -476,15 +476,15 @@ export const DiscoveryView: React.FC<DiscoveryViewProps> = ({ onProceedToMapping
   }, [selectedDatasetIds, allDatasets]);
 
   const primaryDataset = useMemo(() => {
-    return selectedDatasets[0] || allDatasets[0];
+    return selectedDatasets[0] || allDatasets[0] || AVAILABLE_DATASETS[0];
   }, [selectedDatasets, allDatasets]);
 
   const selectedEntity = useMemo(() => {
-    return primaryDataset.schema;
+    return primaryDataset?.schema || TARGET_BC_CUSTOMER_SCHEMA;
   }, [primaryDataset]);
 
   const columnProfiles = useMemo(() => {
-    return primaryDataset.profiles;
+    return primaryDataset?.profiles || TARGET_COLUMN_PROFILES;
   }, [primaryDataset]);
 
   // Dynamic malformed fields calculations

@@ -24,7 +24,7 @@ interface AppState {
 export const useAppStore = create<AppState>((set, get) => {
   // Initialize connectors
   const cachedConnectors = offlineCacheService.getCachedConnectors();
-  const initialConnectors = cachedConnectors && cachedConnectors.length >= 9 ? cachedConnectors : [];
+  const initialConnectors = cachedConnectors && cachedConnectors.length > 0 ? cachedConnectors : MOCK_CONNECTORS;
 
   // Initialize jobs
   const initialJobs = offlineCacheService.getCachedJobs() || MOCK_MIGRATION_JOBS;
