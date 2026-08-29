@@ -1,14 +1,15 @@
 import { Controller, Get, Post, Body, Patch, Param, Query, UseGuards } from '@nestjs/common';
 import { TransformationsService } from './transformations.service';
 import { AuthGuard, RequestUser } from '../common/auth/auth.guard';
+import { TenantWorkspaceGuard } from '../common/guards/tenant.guard';
 import { CurrentUser } from '../common/auth/current-user.decorator';
-import { CreateTransformationSetSchema, UpdateTransformationDraftSchema, PaginationQuerySchema, PaginationQueryDto, PaginatedResult } from '@edimp/contracts';
+import { CreateTransformationSetSchema, UpdateTransformationDraftSchema, PaginationQuerySchema, PaginationQueryDto, PaginatedResult, TransformationSetResponse, TransformationVersionResponse, CreateTransformationSetDto, UpdateTransformationDraftDto } from '@edimp/contracts';
 import { ZodValidationPipe } from 'nestjs-zod';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 
 @ApiTags('transformations')
 @Controller()
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, TenantWorkspaceGuard)
 export class TransformationsController {
   constructor(private readonly transformationsService: TransformationsService) {}
 
@@ -20,9 +21,9 @@ export class TransformationsController {
   @ApiResponse({ status: 409, description: 'Conflict - Name already exists in Workspace' })
   create(
     @Param('workspaceId') workspaceId: string,
-    @Body(new ZodValidationPipe(CreateTransformationSetSchema)) dto: any,
+    @Body(new ZodValidationPipe(CreateTransformationSetSchema)) dto: CreateTransformationSetDto,
     @CurrentUser() user: RequestUser,
-  ): Promise<any> {
+  ): Promise<TransformationSetResponse> {
     return this.transformationsService.create(workspaceId, dto, user);
   }
 
@@ -36,7 +37,7 @@ export class TransformationsController {
     @Param('workspaceId') workspaceId: string,
     @Query(new ZodValidationPipe(PaginationQuerySchema)) query: PaginationQueryDto,
     @CurrentUser() user: RequestUser,
-  ): Promise<any[] | PaginatedResult<any>> {
+  ): Promise<PaginatedResult<TransformationSetResponse>> {
     return this.transformationsService.findAll(workspaceId, user, query);
   }
 
@@ -44,7 +45,7 @@ export class TransformationsController {
   @ApiOperation({ summary: 'Get TransformationSet details by ID' })
   @ApiResponse({ status: 200, description: 'TransformationSet details' })
   @ApiResponse({ status: 404, description: 'TransformationSet not found' })
-  findOne(@Param('id') id: string, @CurrentUser() user: RequestUser): Promise<any> {
+  findOne(@Param('id') id: string, @CurrentUser() user: RequestUser): Promise<TransformationSetResponse> {
     return this.transformationsService.findOne(id, user);
   }
 
@@ -54,9 +55,9 @@ export class TransformationsController {
   @ApiResponse({ status: 400, description: 'No DRAFT version exists or published version cannot be modified' })
   updateDraft(
     @Param('id') id: string,
-    @Body(new ZodValidationPipe(UpdateTransformationDraftSchema)) dto: any,
+    @Body(new ZodValidationPipe(UpdateTransformationDraftSchema)) dto: UpdateTransformationDraftDto,
     @CurrentUser() user: RequestUser,
-  ): Promise<any> {
+  ): Promise<TransformationSetResponse> {
     return this.transformationsService.updateDraft(id, dto, user);
   }
 
@@ -68,7 +69,7 @@ export class TransformationsController {
     @Param('id') id: string,
     @Param('versionId') versionId: string,
     @CurrentUser() user: RequestUser,
-  ): Promise<any> {
+  ): Promise<TransformationVersionResponse> {
     return this.transformationsService.publishVersion(id, versionId, user);
   }
 }

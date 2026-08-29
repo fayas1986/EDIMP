@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { Prisma } from '@edimp/database';
+import { ErrorDetail } from '@edimp/contracts';
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -21,7 +22,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     let statusCode = HttpStatus.INTERNAL_SERVER_ERROR;
     let error = 'Internal Server Error';
     let message = 'An unexpected internal error occurred';
-    let details: any[] = [];
+    let details: ErrorDetail[] = [];
 
     // Extract traceId from response headers (set by TraceInterceptor) or request headers
     const traceId =
@@ -29,18 +30,28 @@ export class AllExceptionsFilter implements ExceptionFilter {
       (request.headers['x-trace-id'] as string) ||
       (request.headers['traceparent'] ? (request.headers['traceparent'] as string).split('-')[1] : undefined);
 
-    if (exception instanceof HttpException) {
-      statusCode = exception.getStatus();
-      const resPayload = exception.getResponse();
+    if (exception instanceof HttpException || (exception && typeof (exception as any).getStatus === 'function' && typeof (exception as any).getResponse === 'function')) {
+      statusCode = (exception as any).getStatus();
+      const resPayload = (exception as any).getResponse();
 
       if (typeof resPayload === 'string') {
         message = resPayload;
         error = this.getHttpStatusName(statusCode);
       } else if (typeof resPayload === 'object' && resPayload !== null) {
         const obj = resPayload as any;
-        message = obj.message || exception.message;
+        message = obj.message || (exception as any).message;
         error = obj.error || this.getHttpStatusName(statusCode);
-        details = Array.isArray(obj.details) ? obj.details : obj.message && Array.isArray(obj.message) ? obj.message : [];
+        const rawDetails = Array.isArray(obj.details) ? obj.details : (obj.message && Array.isArray(obj.message) ? obj.message : []);
+        details = rawDetails.map((d: any) => {
+          if (typeof d === 'string') {
+            return { message: d };
+          }
+          return {
+            field: d.path && Array.isArray(d.path) ? d.path.join('.') : d.field,
+            message: d.message || String(d),
+            code: d.code,
+          };
+        });
       }
     } else if (exception instanceof Prisma.PrismaClientKnownRequestError) {
       if (exception.code === 'P2002') {

@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestUser } from '../common/auth/auth.guard';
-import { CreateTransformationSetDto, UpdateTransformationDraftDto, PaginationQueryDto, PaginatedResult } from '@edimp/contracts';
+import { CreateTransformationSetDto, UpdateTransformationDraftDto, PaginationQueryDto, PaginatedResult, TransformationSetResponse, TransformationVersionResponse } from '@edimp/contracts';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -43,7 +43,7 @@ export class TransformationsService {
     return crypto.createHash('sha256').update(serialized).digest('hex');
   }
 
-  async create(workspaceId: string, dto: CreateTransformationSetDto, user: RequestUser) {
+  async create(workspaceId: string, dto: CreateTransformationSetDto, user: RequestUser): Promise<TransformationSetResponse> {
     await this.verifyWorkspaceAccess(workspaceId, user.id);
 
     const existing = await this.prisma.transformationSet.findFirst({
@@ -58,7 +58,7 @@ export class TransformationsService {
       throw new ConflictException(`TransformationSet with name '${dto.name}' already exists in this workspace`);
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const set = await tx.transformationSet.create({
         data: {
           workspaceId,
@@ -97,27 +97,21 @@ export class TransformationsService {
         },
       });
     });
+
+    if (!result) {
+      throw new NotFoundException(`TransformationSet not found after creation`);
+    }
+
+    return result as any as TransformationSetResponse;
   }
 
-  async findAll(workspaceId: string, user: RequestUser, query?: PaginationQueryDto): Promise<any[] | PaginatedResult<any>> {
+  async findAll(workspaceId: string, user: RequestUser, query?: PaginationQueryDto): Promise<PaginatedResult<TransformationSetResponse>> {
     await this.verifyWorkspaceAccess(workspaceId, user.id);
 
     const where = { workspaceId, deletedAt: null };
 
-    if (!query?.page && !query?.pageSize) {
-      return this.prisma.transformationSet.findMany({
-        where,
-        include: {
-          versions: {
-            orderBy: { version: 'desc' },
-            take: 1,
-          },
-        },
-      });
-    }
-
-    const page = query.page || 1;
-    const pageSize = query.pageSize || 20;
+    const page = query?.page || 1;
+    const pageSize = query?.pageSize || 20;
 
     const [data, totalItems] = await Promise.all([
       this.prisma.transformationSet.findMany({
@@ -128,6 +122,9 @@ export class TransformationsService {
           versions: {
             orderBy: { version: 'desc' },
             take: 1,
+            include: {
+              fieldTransformations: true,
+            },
           },
         },
       }),
@@ -135,17 +132,17 @@ export class TransformationsService {
     ]);
 
     return {
-      data,
+      data: data as any as TransformationSetResponse[],
       pagination: {
         page,
         pageSize,
         totalItems,
-        totalPages: Math.ceil(totalItems / pageSize),
+        totalPages: Math.ceil(totalItems / pageSize) || 1,
       },
     };
   }
 
-  async findOne(id: string, user: RequestUser) {
+  async findOne(id: string, user: RequestUser): Promise<TransformationSetResponse> {
     const set = await this.prisma.transformationSet.findFirst({
       where: { id, deletedAt: null },
       include: {
@@ -164,20 +161,20 @@ export class TransformationsService {
 
     await this.verifyWorkspaceAccess(set.workspaceId, user.id);
 
-    return set;
+    return set as any as TransformationSetResponse;
   }
 
-  async updateDraft(id: string, dto: UpdateTransformationDraftDto, user: RequestUser) {
+  async updateDraft(id: string, dto: UpdateTransformationDraftDto, user: RequestUser): Promise<TransformationSetResponse> {
     const set = await this.findOne(id, user);
 
-    const latestVersion = set.versions[0];
+    const latestVersion = (set as any).versions[0];
     if (!latestVersion || latestVersion.status !== 'DRAFT') {
       throw new BadRequestException(
         `Cannot update TransformationSet ${id}: no DRAFT version exists. Create a new draft first.`
       );
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       if (dto.name || dto.description !== undefined) {
         await tx.transformationSet.update({
           where: { id },
@@ -217,13 +214,19 @@ export class TransformationsService {
         },
       });
     });
+
+    if (!result) {
+      throw new NotFoundException(`TransformationSet not found after update`);
+    }
+
+    return result as any as TransformationSetResponse;
   }
 
   // Atomic pessimistic publication: SELECT parent FOR UPDATE -> validate DRAFT -> supersede PUBLISHED -> publish
-  async publishVersion(transformationSetId: string, versionId: string, user: RequestUser) {
+  async publishVersion(transformationSetId: string, versionId: string, user: RequestUser): Promise<TransformationVersionResponse> {
     const set = await this.findOne(transformationSetId, user);
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       // 1. Pessimistic row locking on parent TransformationSet
       await tx.$executeRawUnsafe(
         `SELECT id FROM "TransformationSet" WHERE id = $1 FOR UPDATE`,
@@ -272,5 +275,7 @@ export class TransformationsService {
 
       return published;
     });
+
+    return result as any as TransformationVersionResponse;
   }
 }

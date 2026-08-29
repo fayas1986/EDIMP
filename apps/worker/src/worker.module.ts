@@ -4,6 +4,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { PrismaModule } from '../../api/src/prisma/prisma.module';
 import { MigrationEngineModule } from '../../api/src/migration-engine/migration-engine.module';
 import { SecretsModule } from '../../api/src/common/secrets/secrets.module';
+import { AuthModule } from '../../api/src/common/auth/auth.module';
 import { MigrationProcessor } from './migration.processor';
 
 @Module({
@@ -11,6 +12,7 @@ import { MigrationProcessor } from './migration.processor';
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
     SecretsModule,
+    AuthModule,
     MigrationEngineModule,
     BullModule.forRootAsync({
       imports: [ConfigModule],

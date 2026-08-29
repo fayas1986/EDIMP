@@ -179,21 +179,22 @@ enum LogLevel {
 model Tenant {
   id        String    @id @default(cuid())
   name      String
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  createdAt DateTime @db.Timestamptz(6)  @default(now())
+  updatedAt DateTime @db.Timestamptz(6)  @updatedAt
+  deletedAt DateTime? @db.Timestamptz(6)
 
   workspaces Workspace[]
   members    TenantMember[]
 }
 
 model User {
-  id        String    @id @default(cuid())
-  email     String    @unique
-  name      String?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  id                 String    @id @default(cuid())
+  email              String    @unique
+  externalIdentityId String?   @unique
+  name               String?
+  createdAt          DateTime @db.Timestamptz(6)  @default(now())
+  updatedAt          DateTime @db.Timestamptz(6)  @updatedAt
+  deletedAt          DateTime? @db.Timestamptz(6)
 
   tenantMembers                  TenantMember[]
   workspaceMembers               WorkspaceMember[]
@@ -219,8 +220,8 @@ model TenantMember {
   tenantId  String
   userId    String
   role      TenantRole
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  createdAt DateTime @db.Timestamptz(6)   @default(now())
+  updatedAt DateTime @db.Timestamptz(6)   @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
@@ -233,9 +234,9 @@ model Workspace {
   id        String    @id @default(cuid())
   tenantId  String
   name      String
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  createdAt DateTime @db.Timestamptz(6)  @default(now())
+  updatedAt DateTime @db.Timestamptz(6)  @updatedAt
+  deletedAt DateTime? @db.Timestamptz(6)
 
   tenant            Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   environments      Environment[]
@@ -262,8 +263,8 @@ model WorkspaceMember {
   workspaceId String
   userId      String
   role        WorkspaceRole
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  createdAt   DateTime @db.Timestamptz(6)      @default(now())
+  updatedAt   DateTime @db.Timestamptz(6)      @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   user      User      @relation(fields: [userId], references: [id], onDelete: Restrict)
@@ -277,9 +278,9 @@ model Environment {
   workspaceId String
   name        String
   status      EnvironmentStatus @default(ACTIVE)
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
-  deletedAt   DateTime?
+  createdAt   DateTime @db.Timestamptz(6)          @default(now())
+  updatedAt   DateTime @db.Timestamptz(6)          @updatedAt
+  deletedAt   DateTime? @db.Timestamptz(6)
 
   workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   connections        Connection[]
@@ -304,8 +305,8 @@ model ConnectorType {
   direction    ConnectorDirection @default(BOTH)
   status       ConnectorStatus    @default(ACTIVE)
   capabilities Json
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
+  createdAt    DateTime @db.Timestamptz(6)           @default(now())
+  updatedAt    DateTime @db.Timestamptz(6)           @updatedAt
 
   connections Connection[]
 }
@@ -317,9 +318,9 @@ model Connection {
   name            String
   description     String?
   status          ConnectionStatus @default(ACTIVE)
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  deletedAt       DateTime?
+  createdAt       DateTime @db.Timestamptz(6)         @default(now())
+  updatedAt       DateTime @db.Timestamptz(6)         @updatedAt
+  deletedAt       DateTime? @db.Timestamptz(6)
 
   environment   Environment          @relation(fields: [environmentId], references: [id], onDelete: Restrict)
   connectorType          ConnectorType                    @relation(fields: [connectorTypeId], references: [id], onDelete: Restrict)
@@ -331,6 +332,7 @@ model Connection {
   reconTargetConfigs     ReconciliationConfigurationVersion[] @relation("ReconTargetConn")
 
   @@index([connectorTypeId])
+  @@index([environmentId])
 }
 
 model CredentialReference {
@@ -338,8 +340,8 @@ model CredentialReference {
   connectionId   String         @unique
   credentialType CredentialType
   vaultPath      String
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  createdAt      DateTime @db.Timestamptz(6)       @default(now())
+  updatedAt      DateTime @db.Timestamptz(6)       @updatedAt
 
   connection Connection @relation(fields: [connectionId], references: [id], onDelete: Restrict)
 }
@@ -349,12 +351,14 @@ model DataModel {
   connectionId String
   name         String
   description  String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  deletedAt    DateTime?
+  createdAt    DateTime @db.Timestamptz(6)  @default(now())
+  updatedAt    DateTime @db.Timestamptz(6)  @updatedAt
+  deletedAt    DateTime? @db.Timestamptz(6)
 
   connection Connection         @relation(fields: [connectionId], references: [id], onDelete: Restrict)
   versions   DataModelVersion[]
+
+  @@index([connectionId])
 }
 
 model DataModelVersion {
@@ -362,7 +366,7 @@ model DataModelVersion {
   dataModelId String
   version     Int
   status      DataModelVersionStatus @default(DRAFT)
-  createdAt   DateTime               @default(now())
+  createdAt   DateTime @db.Timestamptz(6)               @default(now())
 
   dataModel              DataModel                        @relation(fields: [dataModelId], references: [id], onDelete: Restrict)
   entities               DataEntity[]
@@ -385,7 +389,7 @@ model DataEntity {
   dataModelVersionId String
   name               String
   description        String?
-  createdAt          DateTime @default(now())
+  createdAt          DateTime @db.Timestamptz(6) @default(now())
 
   dataModelVersion     DataModelVersion    @relation(fields: [dataModelVersionId], references: [id], onDelete: Restrict)
   fields               DataField[]
@@ -403,7 +407,7 @@ model DataField {
   dataType     DataType @default(UNKNOWN)
   isNullable   Boolean  @default(true)
   isPrimaryKey Boolean  @default(false)
-  createdAt    DateTime @default(now())
+  createdAt    DateTime @db.Timestamptz(6) @default(now())
 
   dataEntity          DataEntity          @relation(fields: [dataEntityId], references: [id], onDelete: Cascade)
   metrics             DataProfileMetric[]
@@ -416,11 +420,11 @@ model DataField {
 model DataProfileRun {
   id                 String           @id @default(cuid())
   dataModelVersionId String
-  queuedAt           DateTime         @default(now())
-  startedAt          DateTime?
-  completedAt        DateTime?
+  queuedAt           DateTime @db.Timestamptz(6)         @default(now())
+  startedAt          DateTime? @db.Timestamptz(6)
+  completedAt        DateTime? @db.Timestamptz(6)
   status             ProfileRunStatus @default(QUEUED)
-  createdAt          DateTime         @default(now())
+  createdAt          DateTime @db.Timestamptz(6)         @default(now())
 
   dataModelVersion DataModelVersion    @relation(fields: [dataModelVersionId], references: [id], onDelete: Restrict)
   metrics          DataProfileMetric[]
@@ -436,13 +440,12 @@ model DataProfileMetric {
   metricType       ProfileMetricType
   metricValue      Json
   snapshotName     String?
-  createdAt        DateTime          @default(now())
+  createdAt        DateTime @db.Timestamptz(6)          @default(now())
 
   dataProfileRun DataProfileRun @relation(fields: [dataProfileRunId], references: [id], onDelete: Cascade)
   dataEntity     DataEntity?    @relation(fields: [dataEntityId], references: [id], onDelete: Restrict)
   dataField      DataField?     @relation(fields: [dataFieldId], references: [id], onDelete: Restrict)
 
-  @@index([dataProfileRunId])
   @@index([dataProfileRunId, metricType])
   @@index([dataEntityId])
   @@index([dataFieldId])
@@ -457,9 +460,9 @@ model CanonicalModel {
   workspaceId String
   name        String
   description String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  deletedAt   DateTime?
+  createdAt   DateTime @db.Timestamptz(6)  @default(now())
+  updatedAt   DateTime @db.Timestamptz(6)  @updatedAt
+  deletedAt   DateTime? @db.Timestamptz(6)
 
   workspace Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   versions  CanonicalModelVersion[]
@@ -473,9 +476,9 @@ model CanonicalModelVersion {
   version           Int
   status            CanonicalModelVersionStatus @default(DRAFT)
   definitionHash    String?
-  publishedAt       DateTime?
+  publishedAt       DateTime? @db.Timestamptz(6)
   publishedByUserId String?
-  createdAt         DateTime                    @default(now())
+  createdAt         DateTime @db.Timestamptz(6)                    @default(now())
 
   canonicalModel  CanonicalModel   @relation(fields: [canonicalModelId], references: [id], onDelete: Restrict)
   publishedByUser User?            @relation(fields: [publishedByUserId], references: [id], onDelete: Restrict)
@@ -491,7 +494,7 @@ model CanonicalEntity {
   canonicalModelVersionId String
   name                    String
   description             String?
-  createdAt               DateTime @default(now())
+  createdAt               DateTime @db.Timestamptz(6) @default(now())
 
   canonicalModelVersion CanonicalModelVersion @relation(fields: [canonicalModelVersionId], references: [id], onDelete: Cascade)
   fields                CanonicalField[]
@@ -507,7 +510,7 @@ model CanonicalField {
   dataType          DataType @default(UNKNOWN)
   isNullable        Boolean  @default(true)
   isPrimaryKey      Boolean  @default(false)
-  createdAt         DateTime @default(now())
+  createdAt         DateTime @db.Timestamptz(6) @default(now())
 
   canonicalEntity CanonicalEntity @relation(fields: [canonicalEntityId], references: [id], onDelete: Cascade)
   fieldMappings   FieldMapping[]
@@ -521,9 +524,9 @@ model MappingSet {
   name        String
   description String?
   direction   MappingDirection
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-  deletedAt   DateTime?
+  createdAt   DateTime @db.Timestamptz(6)         @default(now())
+  updatedAt   DateTime @db.Timestamptz(6)         @updatedAt
+  deletedAt   DateTime? @db.Timestamptz(6)
 
   workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   versions  MappingVersion[]
@@ -539,9 +542,9 @@ model MappingVersion {
   version                 Int
   status                  MappingVersionStatus @default(DRAFT)
   definitionHash          String?
-  publishedAt             DateTime?
+  publishedAt             DateTime? @db.Timestamptz(6)
   publishedByUserId       String?
-  createdAt               DateTime             @default(now())
+  createdAt               DateTime @db.Timestamptz(6)             @default(now())
 
   mappingSet            MappingSet            @relation(fields: [mappingSetId], references: [id], onDelete: Restrict)
   canonicalModelVersion CanonicalModelVersion @relation(fields: [canonicalModelVersionId], references: [id], onDelete: Restrict)
@@ -553,6 +556,8 @@ model MappingVersion {
   aiMappingSuggestions  AiMappingSuggestion[]
 
   @@unique([mappingSetId, version])
+  @@index([canonicalModelVersionId])
+  @@index([dataModelVersionId])
 }
 
 model EntityMapping {
@@ -561,7 +566,7 @@ model EntityMapping {
   sourceEntityId    String?
   canonicalEntityId String?
   targetEntityId    String?
-  createdAt         DateTime @default(now())
+  createdAt         DateTime @db.Timestamptz(6) @default(now())
 
   mappingVersion  MappingVersion   @relation(fields: [mappingVersionId], references: [id], onDelete: Restrict)
   sourceEntity    DataEntity?      @relation("SourceEntityMapping", fields: [sourceEntityId], references: [id], onDelete: Restrict)
@@ -580,7 +585,7 @@ model FieldMapping {
   targetFieldId    String?
   transformType    TransformType @default(DIRECT)
   config           Json          @default("{}")
-  createdAt        DateTime      @default(now())
+  createdAt        DateTime @db.Timestamptz(6)      @default(now())
 
   entityMapping  EntityMapping   @relation(fields: [entityMappingId], references: [id], onDelete: Cascade)
   sourceField    DataField?      @relation("SourceFieldMapping", fields: [sourceFieldId], references: [id], onDelete: Restrict)
@@ -599,9 +604,9 @@ model TransformationSet {
   workspaceId String
   name        String
   description String?
-  createdAt   DateTime                @default(now())
-  updatedAt   DateTime                @updatedAt
-  deletedAt   DateTime?
+  createdAt   DateTime @db.Timestamptz(6)                @default(now())
+  updatedAt   DateTime @db.Timestamptz(6)                @updatedAt
+  deletedAt   DateTime? @db.Timestamptz(6)
 
   workspace Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   versions  TransformationVersion[]
@@ -615,9 +620,9 @@ model TransformationVersion {
   version             Int
   status              TransformationVersionStatus @default(DRAFT)
   definitionHash      String?
-  publishedAt         DateTime?
+  publishedAt         DateTime? @db.Timestamptz(6)
   publishedByUserId   String?
-  createdAt           DateTime                    @default(now())
+  createdAt           DateTime @db.Timestamptz(6)                    @default(now())
 
   transformationSet    TransformationSet               @relation(fields: [transformationSetId], references: [id], onDelete: Restrict)
   publishedByUser      User?                           @relation(fields: [publishedByUserId], references: [id], onDelete: Restrict)
@@ -634,7 +639,7 @@ model FieldTransformation {
   targetFieldIdentifier   String
   transformType           TransformType         @default(DIRECT)
   config                  Json                  @default("{}")
-  createdAt               DateTime              @default(now())
+  createdAt               DateTime @db.Timestamptz(6)              @default(now())
 
   transformationVersion TransformationVersion @relation(fields: [transformationVersionId], references: [id], onDelete: Cascade)
 
@@ -646,9 +651,9 @@ model ValidationSet {
   workspaceId String
   name        String
   description String?
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
-  deletedAt   DateTime?
+  createdAt   DateTime @db.Timestamptz(6)            @default(now())
+  updatedAt   DateTime @db.Timestamptz(6)            @updatedAt
+  deletedAt   DateTime? @db.Timestamptz(6)
 
   workspace Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   versions  ValidationVersion[]
@@ -662,9 +667,9 @@ model ValidationVersion {
   version           Int
   status            ValidationVersionStatus         @default(DRAFT)
   definitionHash    String?
-  publishedAt       DateTime?
+  publishedAt       DateTime? @db.Timestamptz(6)
   publishedByUserId String?
-  createdAt         DateTime                        @default(now())
+  createdAt         DateTime @db.Timestamptz(6)                        @default(now())
 
   validationSet       ValidationSet                   @relation(fields: [validationSetId], references: [id], onDelete: Restrict)
   publishedByUser     User?                           @relation(fields: [publishedByUserId], references: [id], onDelete: Restrict)
@@ -682,7 +687,7 @@ model FieldValidationRule {
   ruleType              RuleType
   ruleConfig            Json              @default("{}")
   severity              Severity          @default(ERROR)
-  createdAt             DateTime          @default(now())
+  createdAt             DateTime @db.Timestamptz(6)          @default(now())
 
   validationVersion ValidationVersion   @relation(fields: [validationVersionId], references: [id], onDelete: Cascade)
 
@@ -699,9 +704,9 @@ model PipelineJob {
   name                    String
   description             String?
   status                  PipelineJobStatus @default(ACTIVE)
-  createdAt               DateTime          @default(now())
-  updatedAt               DateTime          @updatedAt
-  deletedAt               DateTime?
+  createdAt               DateTime @db.Timestamptz(6)          @default(now())
+  updatedAt               DateTime @db.Timestamptz(6)          @updatedAt
+  deletedAt               DateTime? @db.Timestamptz(6)
 
   workspace             Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   environment           Environment           @relation(fields: [environmentId], references: [id], onDelete: Restrict)
@@ -731,10 +736,10 @@ model PipelineExecutionRun {
   recordsValidated            BigInt             @default(0)
   recordsValidationFailed     BigInt             @default(0)
   recordsTransformationFailed BigInt             @default(0)
-  queuedAt                    DateTime           @default(now())
-  startedAt                   DateTime?
-  completedAt                 DateTime?
-  createdAt                   DateTime           @default(now())
+  queuedAt                    DateTime @db.Timestamptz(6)           @default(now())
+  startedAt                   DateTime? @db.Timestamptz(6)
+  completedAt                 DateTime? @db.Timestamptz(6)
+  createdAt                   DateTime @db.Timestamptz(6)           @default(now())
 
   pipelineJob PipelineJob            @relation(fields: [pipelineJobId], references: [id], onDelete: Restrict)
   logs        PipelineExecutionLog[]
@@ -749,7 +754,7 @@ model PipelineExecutionLog {
   level                  LogLevel             @default(INFO)
   message                String
   metadata               Json                 @default("{}")
-  createdAt              DateTime             @default(now())
+  createdAt              DateTime @db.Timestamptz(6)             @default(now())
 
   executionRun PipelineExecutionRun          @relation(fields: [pipelineExecutionRunId], references: [id], onDelete: Cascade)
 
@@ -831,9 +836,9 @@ model MigrationJob {
   description   String?
   status        MigrationJobStatus @default(ACTIVE)
   loadStrategy  LoadStrategy       @default(UPSERT)
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
-  deletedAt     DateTime?
+  createdAt     DateTime @db.Timestamptz(6)           @default(now())
+  updatedAt     DateTime @db.Timestamptz(6)           @updatedAt
+  deletedAt     DateTime? @db.Timestamptz(6)
 
   workspace      Workspace                       @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   environment    Environment                     @relation(fields: [environmentId], references: [id], onDelete: Restrict)
@@ -856,9 +861,9 @@ model MigrationConfigurationVersion {
   transformationVersionId  String
   validationVersionId      String
   configurationHash        String?
-  publishedAt              DateTime?
+  publishedAt              DateTime? @db.Timestamptz(6)
   publishedByUserId        String?
-  createdAt                DateTime                     @default(now())
+  createdAt                DateTime @db.Timestamptz(6)                     @default(now())
 
   migrationJob           MigrationJob          @relation(fields: [migrationJobId], references: [id], onDelete: Restrict)
   sourceConnection       Connection            @relation("SourceConnection", fields: [sourceConnectionId], references: [id], onDelete: Restrict)
@@ -874,6 +879,9 @@ model MigrationConfigurationVersion {
   runs                   MigrationRun[]
 
   @@unique([migrationJobId, version])
+  @@index([sourceConnectionId])
+  @@index([targetConnectionId])
+  @@index([mappingVersionId])
 }
 
 model MigrationIdentity {
@@ -888,8 +896,8 @@ model MigrationIdentity {
   lastTargetRecordId              String?
   lastStatus                      RecordStatus  @default(EXTRACTED)
   lastLoadOperation               LoadOperation @default(NONE)
-  createdAt                       DateTime      @default(now())
-  updatedAt                       DateTime      @updatedAt
+  createdAt                       DateTime @db.Timestamptz(6)      @default(now())
+  updatedAt                       DateTime @db.Timestamptz(6)      @updatedAt
 
   migrationConfigVersion MigrationConfigurationVersion @relation(fields: [migrationConfigurationVersionId], references: [id], onDelete: Cascade)
   records                MigrationRecord[]
@@ -903,8 +911,8 @@ model MigrationRun {
   migrationConfigurationVersionId String
   status                           MigrationRunStatus @default(QUEUED)
   workerLeaseId                    String?
-  workerHeartbeatAt                DateTime?
-  leaseExpiresAt                   DateTime?
+  workerHeartbeatAt                DateTime? @db.Timestamptz(6)
+  leaseExpiresAt                   DateTime? @db.Timestamptz(6)
   recordsExtracted                 BigInt             @default(0)
   recordsProcessed                 BigInt             @default(0)
   recordsTransformed               BigInt             @default(0)
@@ -917,10 +925,10 @@ model MigrationRun {
   recordsRetried                   BigInt             @default(0)
   batchesTotal                     Int                @default(0)
   batchesCompleted                 Int                @default(0)
-  queuedAt                         DateTime           @default(now())
-  startedAt                        DateTime?
-  completedAt                      DateTime?
-  createdAt                        DateTime           @default(now())
+  queuedAt                         DateTime @db.Timestamptz(6)           @default(now())
+  startedAt                        DateTime? @db.Timestamptz(6)
+  completedAt                      DateTime? @db.Timestamptz(6)
+  createdAt                        DateTime @db.Timestamptz(6)           @default(now())
 
   migrationConfigVersion MigrationConfigurationVersion @relation(fields: [migrationConfigurationVersionId], references: [id], onDelete: Restrict)
   batches                JobBatch[]
@@ -941,11 +949,11 @@ model JobBatch {
   failedCount       Int         @default(0)
   checkpointCursor  String?
   workerLeaseId     String?
-  workerHeartbeatAt DateTime?
-  leaseExpiresAt    DateTime?
-  startedAt         DateTime?
-  completedAt       DateTime?
-  createdAt         DateTime    @default(now())
+  workerHeartbeatAt DateTime? @db.Timestamptz(6)
+  leaseExpiresAt    DateTime? @db.Timestamptz(6)
+  startedAt         DateTime? @db.Timestamptz(6)
+  completedAt       DateTime? @db.Timestamptz(6)
+  createdAt         DateTime @db.Timestamptz(6)    @default(now())
 
   migrationRun MigrationRun      @relation(fields: [migrationRunId], references: [id], onDelete: Restrict)
   records      MigrationRecord[]
@@ -964,8 +972,8 @@ model MigrationRecord {
   status              RecordStatus  @default(EXTRACTED)
   loadOperation       LoadOperation @default(NONE)
   attemptCount        Int           @default(1)
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @updatedAt
+  createdAt           DateTime @db.Timestamptz(6)      @default(now())
+  updatedAt           DateTime @db.Timestamptz(6)      @updatedAt
 
   migrationRun      MigrationRun      @relation(fields: [migrationRunId], references: [id], onDelete: Cascade)
   jobBatch          JobBatch          @relation(fields: [jobBatchId], references: [id], onDelete: Cascade)
@@ -989,8 +997,8 @@ model RecordError {
   resolutionStatus     ErrorResolutionStatus @default(OPEN)
   assignedToUserId     String?
   resolvedByUserId     String?
-  resolvedAt           DateTime?
-  createdAt            DateTime              @default(now())
+  resolvedAt           DateTime? @db.Timestamptz(6)
+  createdAt            DateTime @db.Timestamptz(6)              @default(now())
 
   migrationRecord MigrationRecord      @relation(fields: [migrationRecordId], references: [id], onDelete: Cascade)
   assignedToUser  User?                @relation("AssignedErrorUser", fields: [assignedToUserId], references: [id], onDelete: Restrict)
@@ -1074,9 +1082,9 @@ model ReconciliationJob {
   name          String
   description   String?
   status        String    @default("ACTIVE")
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  deletedAt     DateTime?
+  createdAt     DateTime @db.Timestamptz(6)  @default(now())
+  updatedAt     DateTime @db.Timestamptz(6)  @updatedAt
+  deletedAt     DateTime? @db.Timestamptz(6)
 
   workspace      Workspace                            @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   environment    Environment                          @relation(fields: [environmentId], references: [id], onDelete: Restrict)
@@ -1104,9 +1112,9 @@ model ReconciliationConfigurationVersion {
   samplingConfig           Json                              @default("{}")
   watermarkConfig          Json                              @default("{}")
   configurationHash        String?
-  publishedAt              DateTime?
+  publishedAt              DateTime? @db.Timestamptz(6)
   publishedByUserId        String?
-  createdAt                DateTime                          @default(now())
+  createdAt                DateTime @db.Timestamptz(6)                          @default(now())
 
   reconciliationJob      ReconciliationJob    @relation(fields: [reconciliationJobId], references: [id], onDelete: Restrict)
   sourceConnection       Connection           @relation("ReconSourceConn", fields: [sourceConnectionId], references: [id], onDelete: Restrict)
@@ -1127,8 +1135,8 @@ model ReconciliationRun {
   migrationRunId                       String?
   status                               ReconciliationRunStatus @default(QUEUED)
   workerLeaseId                        String?
-  workerHeartbeatAt                    DateTime?
-  leaseExpiresAt                       DateTime?
+  workerHeartbeatAt                    DateTime? @db.Timestamptz(6)
+  leaseExpiresAt                       DateTime? @db.Timestamptz(6)
   totalRecordsCompared                 BigInt                  @default(0)
   discrepanciesFound                   BigInt                  @default(0)
   missingCount                         BigInt                  @default(0)
@@ -1137,9 +1145,9 @@ model ReconciliationRun {
   aggregateMismatchCount               BigInt                  @default(0)
   batchesTotal                         Int                     @default(0)
   batchesCompleted                     Int                     @default(0)
-  startedAt                            DateTime?
-  completedAt                          DateTime?
-  createdAt                            DateTime                @default(now())
+  startedAt                            DateTime? @db.Timestamptz(6)
+  completedAt                          DateTime? @db.Timestamptz(6)
+  createdAt                            DateTime @db.Timestamptz(6)                @default(now())
 
   reconConfigVersion ReconciliationConfigurationVersion @relation(fields: [reconciliationConfigurationVersionId], references: [id], onDelete: Restrict)
   migrationRun       MigrationRun?                      @relation(fields: [migrationRunId], references: [id], onDelete: SetNull)
@@ -1157,9 +1165,9 @@ model ReconciliationBatch {
   status              String    @default("QUEUED")
   recordCount         Int       @default(0)
   checkpointCursor    String?
-  startedAt           DateTime?
-  completedAt         DateTime?
-  createdAt           DateTime  @default(now())
+  startedAt           DateTime? @db.Timestamptz(6)
+  completedAt         DateTime? @db.Timestamptz(6)
+  createdAt           DateTime @db.Timestamptz(6)  @default(now())
 
   reconciliationRun ReconciliationRun @relation(fields: [reconciliationRunId], references: [id], onDelete: Cascade)
 
@@ -1175,8 +1183,8 @@ model ReconciliationDiscrepancy {
   fieldIdentifier                      String?
   discrepancyType                      DiscrepancyType
   status                               DiscrepancyStatus @default(OPEN)
-  createdAt                            DateTime          @default(now())
-  updatedAt                            DateTime          @updatedAt
+  createdAt                            DateTime @db.Timestamptz(6)          @default(now())
+  updatedAt                            DateTime @db.Timestamptz(6)          @updatedAt
 
   reconConfigVersion ReconciliationConfigurationVersion @relation(fields: [reconciliationConfigurationVersionId], references: [id], onDelete: Cascade)
   observations       ReconciliationObservation[]
@@ -1184,6 +1192,8 @@ model ReconciliationDiscrepancy {
 
   @@index([reconciliationConfigurationVersionId])
   @@index([status])
+  @@index([sourceRecordId])
+  @@index([targetRecordId])
 }
 
 model ReconciliationObservation {
@@ -1192,7 +1202,7 @@ model ReconciliationObservation {
   reconciliationRunId         String
   state                       ObservationState @default(NEW)
   payloadDiff                 Json             @default("{}")
-  observedAt                  DateTime         @default(now())
+  observedAt                  DateTime @db.Timestamptz(6)         @default(now())
 
   discrepancy       ReconciliationDiscrepancy @relation(fields: [reconciliationDiscrepancyId], references: [id], onDelete: Cascade)
   reconciliationRun ReconciliationRun         @relation(fields: [reconciliationRunId], references: [id], onDelete: Cascade)
@@ -1208,7 +1218,7 @@ model ErrorManualOverride {
   overridePayload    Json
   overrideReason     String
   overriddenByUserId String
-  createdAt          DateTime @default(now())
+  createdAt          DateTime @db.Timestamptz(6) @default(now())
 
   recordError      RecordError @relation(fields: [recordErrorId], references: [id], onDelete: Cascade)
   overriddenByUser User        @relation("OverrideUser", fields: [overriddenByUserId], references: [id], onDelete: Restrict)
@@ -1222,7 +1232,7 @@ model ErrorResolutionLog {
   toStatus          ErrorResolutionStatus
   performedByUserId String
   details           Json                  @default("{}")
-  createdAt         DateTime              @default(now())
+  createdAt         DateTime @db.Timestamptz(6)              @default(now())
 
   recordError     RecordError @relation(fields: [recordErrorId], references: [id], onDelete: Cascade)
   performedByUser User        @relation("ResolutionLogUser", fields: [performedByUserId], references: [id], onDelete: Restrict)
@@ -1299,8 +1309,8 @@ model AiAgentTask {
   errorMessage     String?
   executionTimeMs  Int?
   
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
+  createdAt        DateTime @db.Timestamptz(6)     @default(now())
+  updatedAt        DateTime @db.Timestamptz(6)     @updatedAt
 
   workspace        Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   environment      Environment  @relation(fields: [environmentId], references: [id], onDelete: Cascade)
@@ -1349,14 +1359,14 @@ model AiMappingSuggestion {
   algorithmVersion      String
   
   acceptedByUserId      String?
-  acceptedAt            DateTime?
+  acceptedAt            DateTime? @db.Timestamptz(6)
   newDraftMappingVerId  String?
   
   rejectedByUserId      String?
-  rejectedAt            DateTime?
+  rejectedAt            DateTime? @db.Timestamptz(6)
   rejectionReason       String?
   
-  createdAt             DateTime           @default(now())
+  createdAt             DateTime @db.Timestamptz(6)           @default(now())
 
   task                  AiAgentTask            @relation(fields: [taskId], references: [id], onDelete: Cascade)
   workspace             Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -1396,10 +1406,10 @@ model AiDriftRepairSuggestion {
   algorithmVersion     String
   
   approvedByUserId     String?
-  approvedAt           DateTime?
+  approvedAt           DateTime? @db.Timestamptz(6)
   createdDraftVersionId String?
   
-  createdAt            DateTime           @default(now())
+  createdAt            DateTime @db.Timestamptz(6)           @default(now())
 
   task                 AiAgentTask        @relation(fields: [taskId], references: [id], onDelete: Cascade)
   workspace            Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -1441,9 +1451,9 @@ model AiAnomalyAnalysis {
   algorithmVersion            String
   
   reviewedByUserId            String?
-  reviewedAt                  DateTime?
+  reviewedAt                  DateTime? @db.Timestamptz(6)
   
-  createdAt                   DateTime                   @default(now())
+  createdAt                   DateTime @db.Timestamptz(6)                   @default(now())
 
   task                        AiAgentTask                @relation(fields: [taskId], references: [id], onDelete: Cascade)
   workspace                   Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -1462,8 +1472,8 @@ model AiQuerySession {
   userId        String
   title         String
   
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  createdAt     DateTime @db.Timestamptz(6)         @default(now())
+  updatedAt     DateTime @db.Timestamptz(6)         @updatedAt
 
   workspace     Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   environment   Environment      @relation(fields: [environmentId], references: [id], onDelete: Cascade)
@@ -1488,7 +1498,7 @@ model AiQueryMessage {
   agentVersion     String?
   algorithmVersion String?
   
-  createdAt        DateTime       @default(now())
+  createdAt        DateTime @db.Timestamptz(6)       @default(now())
 
   session          AiQuerySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
@@ -1525,10 +1535,10 @@ model WorkerNode {
   hostname         String
   ipAddress        String?
   status           WorkerStatus @default(ACTIVE)
-  lastHeartbeatAt  DateTime     @default(now())
+  lastHeartbeatAt  DateTime @db.Timestamptz(6)     @default(now())
   activeLeaseCount Int          @default(0)
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
+  createdAt        DateTime @db.Timestamptz(6)     @default(now())
+  updatedAt        DateTime @db.Timestamptz(6)     @updatedAt
 
   @@index([status])
   @@index([lastHeartbeatAt])
@@ -1547,7 +1557,7 @@ model AuditLog {
   ipAddress     String?
   userAgent     String?
   details       Json        @default("{}")
-  createdAt     DateTime    @default(now())
+  createdAt     DateTime @db.Timestamptz(6)    @default(now())
 
   workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 

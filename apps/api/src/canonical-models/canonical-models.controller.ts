@@ -1,14 +1,15 @@
 import { Controller, Get, Post, Body, Patch, Param, Query, UseGuards } from '@nestjs/common';
 import { CanonicalModelsService } from './canonical-models.service';
 import { AuthGuard, RequestUser } from '../common/auth/auth.guard';
+import { TenantWorkspaceGuard } from '../common/guards/tenant.guard';
 import { CurrentUser } from '../common/auth/current-user.decorator';
-import { CreateCanonicalModelSchema, UpdateCanonicalModelSchema, PaginationQuerySchema, PaginationQueryDto, PaginatedResult } from '@edimp/contracts';
+import { CreateCanonicalModelSchema, UpdateCanonicalModelSchema, PaginationQuerySchema, PaginationQueryDto, PaginatedResult, CanonicalModelResponse, CanonicalModelVersionResponse, CreateCanonicalModelDto, UpdateCanonicalModelDto } from '@edimp/contracts';
 import { ZodValidationPipe } from 'nestjs-zod';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 
 @ApiTags('canonical-models')
 @Controller()
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, TenantWorkspaceGuard)
 export class CanonicalModelsController {
   constructor(private readonly canonicalModelsService: CanonicalModelsService) {}
 
@@ -20,10 +21,10 @@ export class CanonicalModelsController {
   @ApiResponse({ status: 409, description: 'Conflict - Name already exists in workspace' })
   create(
     @Param('workspaceId') workspaceId: string,
-    @Body(new ZodValidationPipe(CreateCanonicalModelSchema)) dto: any,
+    @Body(new ZodValidationPipe(CreateCanonicalModelSchema)) dto: Record<string, unknown>,
     @CurrentUser() user: RequestUser,
-  ): Promise<any> {
-    return this.canonicalModelsService.create(workspaceId, dto, user);
+  ): Promise<CanonicalModelResponse> {
+    return this.canonicalModelsService.create(workspaceId, dto as CreateCanonicalModelDto, user);
   }
 
   @Get('workspaces/:workspaceId/canonical-models')
@@ -36,7 +37,7 @@ export class CanonicalModelsController {
     @Param('workspaceId') workspaceId: string,
     @Query(new ZodValidationPipe(PaginationQuerySchema)) query: PaginationQueryDto,
     @CurrentUser() user: RequestUser,
-  ): Promise<any[] | PaginatedResult<any>> {
+  ): Promise<PaginatedResult<CanonicalModelResponse>> {
     return this.canonicalModelsService.findAll(workspaceId, user, query);
   }
 
@@ -44,7 +45,7 @@ export class CanonicalModelsController {
   @ApiOperation({ summary: 'Get Canonical Data Model details by ID' })
   @ApiResponse({ status: 200, description: 'Canonical model details' })
   @ApiResponse({ status: 404, description: 'Canonical model not found' })
-  findOne(@Param('id') id: string, @CurrentUser() user: RequestUser): Promise<any> {
+  findOne(@Param('id') id: string, @CurrentUser() user: RequestUser): Promise<CanonicalModelResponse> {
     return this.canonicalModelsService.findOne(id, user);
   }
 
@@ -54,10 +55,10 @@ export class CanonicalModelsController {
   @ApiResponse({ status: 400, description: 'No DRAFT version exists or published version cannot be modified' })
   updateDraft(
     @Param('id') id: string,
-    @Body(new ZodValidationPipe(UpdateCanonicalModelSchema)) dto: any,
+    @Body(new ZodValidationPipe(UpdateCanonicalModelSchema)) dto: Record<string, unknown>,
     @CurrentUser() user: RequestUser,
-  ): Promise<any> {
-    return this.canonicalModelsService.updateDraft(id, dto, user);
+  ): Promise<CanonicalModelResponse> {
+    return this.canonicalModelsService.updateDraft(id, dto as UpdateCanonicalModelDto, user);
   }
 
   @Post('canonical-models/:id/versions/:versionId/publish')
@@ -68,7 +69,7 @@ export class CanonicalModelsController {
     @Param('id') id: string,
     @Param('versionId') versionId: string,
     @CurrentUser() user: RequestUser,
-  ): Promise<any> {
+  ): Promise<CanonicalModelVersionResponse> {
     return this.canonicalModelsService.publishVersion(id, versionId, user);
   }
 }

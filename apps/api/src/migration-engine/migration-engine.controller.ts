@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { MigrationEngineService } from './migration-engine.service';
 import { AuthGuard, RequestUser } from '../common/auth/auth.guard';
+import { TenantWorkspaceGuard } from '../common/guards/tenant.guard';
 import { CurrentUser } from '../common/auth/current-user.decorator';
 import {
   CreateMigrationJobSchema,
@@ -21,13 +22,22 @@ import {
   PaginationQuerySchema,
   PaginationQueryDto,
   PaginatedResult,
+  MigrationJobResponse,
+  MigrationConfigurationVersionResponse,
+  MigrationRunResponse,
+  AsyncOperationResponse,
+  CreateMigrationJobDto,
+  CreateMigrationConfigVersionDto,
+  TriggerMigrationRunDto,
+  RetryMigrationRunDto,
+  ResumeMigrationRunDto,
 } from '@edimp/contracts';
 import { ZodValidationPipe } from 'nestjs-zod';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 
 @ApiTags('migration-jobs')
 @Controller()
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, TenantWorkspaceGuard)
 export class MigrationEngineController {
   constructor(private readonly migrationEngineService: MigrationEngineService) {}
 
@@ -38,9 +48,9 @@ export class MigrationEngineController {
   @ApiResponse({ status: 403, description: 'Forbidden - User does not have access to Workspace' })
   createJob(
     @Param('workspaceId') workspaceId: string,
-    @Body(new ZodValidationPipe(CreateMigrationJobSchema)) dto: any,
+    @Body(new ZodValidationPipe(CreateMigrationJobSchema)) dto: CreateMigrationJobDto,
     @CurrentUser() user: RequestUser,
-  ): Promise<any> {
+  ): Promise<MigrationJobResponse> {
     return this.migrationEngineService.createJob(workspaceId, dto, user);
   }
 
@@ -54,7 +64,7 @@ export class MigrationEngineController {
     @Param('workspaceId') workspaceId: string,
     @Query(new ZodValidationPipe(PaginationQuerySchema)) query: PaginationQueryDto,
     @CurrentUser() user: RequestUser,
-  ): Promise<any[] | PaginatedResult<any>> {
+  ): Promise<PaginatedResult<MigrationJobResponse>> {
     return this.migrationEngineService.findAllJobs(workspaceId, user, query);
   }
 
@@ -62,7 +72,7 @@ export class MigrationEngineController {
   @ApiOperation({ summary: 'Get MigrationJob details by ID' })
   @ApiResponse({ status: 200, description: 'MigrationJob details' })
   @ApiResponse({ status: 404, description: 'MigrationJob not found' })
-  findOneJob(@Param('id') id: string, @CurrentUser() user: RequestUser): Promise<any> {
+  findOneJob(@Param('id') id: string, @CurrentUser() user: RequestUser): Promise<MigrationJobResponse> {
     return this.migrationEngineService.findOneJob(id, user);
   }
 
@@ -72,9 +82,9 @@ export class MigrationEngineController {
   @ApiResponse({ status: 400, description: 'Hierarchy validation failed' })
   createConfigVersion(
     @Param('id') jobId: string,
-    @Body(new ZodValidationPipe(CreateMigrationConfigVersionSchema)) dto: any,
+    @Body(new ZodValidationPipe(CreateMigrationConfigVersionSchema)) dto: CreateMigrationConfigVersionDto,
     @CurrentUser() user: RequestUser,
-  ): Promise<any> {
+  ): Promise<MigrationConfigurationVersionResponse> {
     return this.migrationEngineService.createConfigVersion(jobId, dto, user);
   }
 
@@ -85,7 +95,7 @@ export class MigrationEngineController {
   publishConfigVersion(
     @Param('id') configId: string,
     @CurrentUser() user: RequestUser,
-  ): Promise<any> {
+  ): Promise<MigrationConfigurationVersionResponse> {
     return this.migrationEngineService.publishConfigVersion(configId, user);
   }
 
@@ -96,9 +106,9 @@ export class MigrationEngineController {
   @ApiResponse({ status: 400, description: 'No published configuration version exists' })
   triggerRun(
     @Param('id') jobId: string,
-    @Body(new ZodValidationPipe(TriggerMigrationRunSchema)) dto: any,
+    @Body(new ZodValidationPipe(TriggerMigrationRunSchema)) dto: TriggerMigrationRunDto,
     @CurrentUser() user: RequestUser,
-  ): Promise<any> {
+  ): Promise<AsyncOperationResponse> {
     return this.migrationEngineService.triggerRun(jobId, dto, user);
   }
 
@@ -111,7 +121,7 @@ export class MigrationEngineController {
     @Param('id') jobId: string,
     @Query(new ZodValidationPipe(PaginationQuerySchema)) query: PaginationQueryDto,
     @CurrentUser() user: RequestUser,
-  ): Promise<any[] | PaginatedResult<any>> {
+  ): Promise<PaginatedResult<MigrationRunResponse>> {
     return this.migrationEngineService.findRuns(jobId, user, query);
   }
 
@@ -119,7 +129,7 @@ export class MigrationEngineController {
   @ApiOperation({ summary: 'Get details, batch metrics, and record errors for a MigrationRun' })
   @ApiResponse({ status: 200, description: 'MigrationRun details' })
   @ApiResponse({ status: 404, description: 'MigrationRun not found' })
-  findOneRun(@Param('id') runId: string, @CurrentUser() user: RequestUser): Promise<any> {
+  findOneRun(@Param('id') runId: string, @CurrentUser() user: RequestUser): Promise<MigrationRunResponse> {
     return this.migrationEngineService.findOneRun(runId, user);
   }
 
@@ -129,9 +139,9 @@ export class MigrationEngineController {
   @ApiResponse({ status: 202, description: 'Retry initiated for eligible records' })
   retryRun(
     @Param('id') runId: string,
-    @Body(new ZodValidationPipe(RetryMigrationRunSchema)) dto: any,
+    @Body(new ZodValidationPipe(RetryMigrationRunSchema)) dto: RetryMigrationRunDto,
     @CurrentUser() user: RequestUser,
-  ): Promise<any> {
+  ): Promise<AsyncOperationResponse> {
     return this.migrationEngineService.retryRun(runId, dto, user);
   }
 
@@ -141,9 +151,9 @@ export class MigrationEngineController {
   @ApiResponse({ status: 202, description: 'MigrationRun resumed' })
   resumeRun(
     @Param('id') runId: string,
-    @Body(new ZodValidationPipe(ResumeMigrationRunSchema)) dto: any,
+    @Body(new ZodValidationPipe(ResumeMigrationRunSchema)) dto: ResumeMigrationRunDto,
     @CurrentUser() user: RequestUser,
-  ): Promise<any> {
+  ): Promise<AsyncOperationResponse> {
     return this.migrationEngineService.resumeRun(runId, dto, user);
   }
 }

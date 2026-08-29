@@ -1,14 +1,15 @@
 import { Controller, Get, Post, Body, Patch, Param, Query, UseGuards } from '@nestjs/common';
 import { DataModelsService } from './data-models.service';
 import { AuthGuard, RequestUser } from '../common/auth/auth.guard';
+import { TenantWorkspaceGuard } from '../common/guards/tenant.guard';
 import { CurrentUser } from '../common/auth/current-user.decorator';
-import { CreateDataModelSchema, UpdateDataModelSchema, PaginationQuerySchema, PaginationQueryDto, PaginatedResult } from '@edimp/contracts';
+import { CreateDataModelSchema, UpdateDataModelSchema, PaginationQuerySchema, PaginationQueryDto, PaginatedResult, DataModelResponse, DataModelVersionResponse, CreateDataModelDto, UpdateDataModelDto } from '@edimp/contracts';
 import { ZodValidationPipe } from 'nestjs-zod';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 
 @ApiTags('data-models')
 @Controller()
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, TenantWorkspaceGuard)
 export class DataModelsController {
   constructor(private readonly dataModelsService: DataModelsService) {}
 
@@ -20,10 +21,10 @@ export class DataModelsController {
   @ApiResponse({ status: 409, description: 'Conflict - Name already exists in Connection' })
   create(
     @Param('connectionId') connectionId: string,
-    @Body(new ZodValidationPipe(CreateDataModelSchema)) createDataModelDto: any,
+    @Body(new ZodValidationPipe(CreateDataModelSchema)) createDataModelDto: Record<string, unknown>,
     @CurrentUser() user: RequestUser,
-  ): Promise<any> {
-    return this.dataModelsService.create(connectionId, createDataModelDto, user);
+  ): Promise<DataModelResponse> {
+    return this.dataModelsService.create(connectionId, createDataModelDto as CreateDataModelDto, user);
   }
 
   @Get('connections/:connectionId/data-models')
@@ -36,7 +37,7 @@ export class DataModelsController {
     @Param('connectionId') connectionId: string,
     @Query(new ZodValidationPipe(PaginationQuerySchema)) query: PaginationQueryDto,
     @CurrentUser() user: RequestUser,
-  ): Promise<any[] | PaginatedResult<any>> {
+  ): Promise<PaginatedResult<DataModelResponse>> {
     return this.dataModelsService.findAll(connectionId, user, query);
   }
 
@@ -44,7 +45,7 @@ export class DataModelsController {
   @ApiOperation({ summary: 'Get DataModel details by ID' })
   @ApiResponse({ status: 200, description: 'DataModel details' })
   @ApiResponse({ status: 404, description: 'DataModel not found' })
-  findOne(@Param('id') id: string, @CurrentUser() user: RequestUser): Promise<any> {
+  findOne(@Param('id') id: string, @CurrentUser() user: RequestUser): Promise<DataModelResponse> {
     return this.dataModelsService.findOne(id, user);
   }
 
@@ -54,10 +55,10 @@ export class DataModelsController {
   @ApiResponse({ status: 400, description: 'No DRAFT version exists or published version cannot be modified' })
   updateDraft(
     @Param('id') id: string,
-    @Body(new ZodValidationPipe(UpdateDataModelSchema)) updateDataModelDto: any,
+    @Body(new ZodValidationPipe(UpdateDataModelSchema)) updateDataModelDto: Record<string, unknown>,
     @CurrentUser() user: RequestUser,
-  ): Promise<any> {
-    return this.dataModelsService.updateDraft(id, updateDataModelDto, user);
+  ): Promise<DataModelResponse> {
+    return this.dataModelsService.updateDraft(id, updateDataModelDto as UpdateDataModelDto, user);
   }
 
   @Post('data-models/:id/versions/:versionId/publish')
@@ -68,7 +69,7 @@ export class DataModelsController {
     @Param('id') id: string,
     @Param('versionId') versionId: string,
     @CurrentUser() user: RequestUser,
-  ): Promise<any> {
+  ): Promise<DataModelVersionResponse> {
     return this.dataModelsService.publishVersion(id, versionId, user);
   }
 }

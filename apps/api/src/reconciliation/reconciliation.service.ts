@@ -4,6 +4,10 @@ import {
   CreateReconciliationJobDto,
   CreateReconciliationConfigVersionDto,
   TriggerReconciliationRunDto,
+  ReconciliationJobResponse,
+  ReconciliationConfigurationVersionResponse,
+  ReconciliationRunResponse,
+  AsyncOperationResponse,
 } from '@edimp/contracts';
 import {
   ReconciliationConfigVersionStatus,
@@ -31,10 +35,10 @@ export class ReconciliationService {
     }
   }
 
-  async createJob(workspaceId: string, userId: string, dto: CreateReconciliationJobDto) {
+  async createJob(workspaceId: string, userId: string, dto: CreateReconciliationJobDto): Promise<ReconciliationJobResponse> {
     await this.validateHierarchy(workspaceId, dto.environmentId);
 
-    return this.prisma.reconciliationJob.create({
+    const result = await this.prisma.reconciliationJob.create({
       data: {
         workspaceId,
         environmentId: dto.environmentId,
@@ -43,9 +47,11 @@ export class ReconciliationService {
         status: 'ACTIVE',
       },
     });
+
+    return result as any as ReconciliationJobResponse;
   }
 
-  async createConfigurationVersion(jobId: string, userId: string, dto: CreateReconciliationConfigVersionDto) {
+  async createConfigurationVersion(jobId: string, userId: string, dto: CreateReconciliationConfigVersionDto): Promise<ReconciliationConfigurationVersionResponse> {
     const job = await this.prisma.reconciliationJob.findUnique({ where: { id: jobId } });
     if (!job) throw new NotFoundException('Reconciliation job not found');
 
@@ -55,7 +61,7 @@ export class ReconciliationService {
     });
     const versionNumber = (lastVersion?.version ?? 0) + 1;
 
-    return this.prisma.reconciliationConfigurationVersion.create({
+    const result = await this.prisma.reconciliationConfigurationVersion.create({
       data: {
         reconciliationJobId: jobId,
         version: versionNumber,
@@ -74,15 +80,17 @@ export class ReconciliationService {
         watermarkConfig: dto.watermarkConfig ?? {},
       },
     });
+
+    return result as any as ReconciliationConfigurationVersionResponse;
   }
 
-  async publishConfigurationVersion(jobId: string, versionId: string, userId: string) {
+  async publishConfigurationVersion(jobId: string, versionId: string, userId: string): Promise<ReconciliationConfigurationVersionResponse> {
     const version = await this.prisma.reconciliationConfigurationVersion.findFirst({
       where: { id: versionId, reconciliationJobId: jobId },
     });
     if (!version) throw new NotFoundException('Configuration version not found');
     if (version.status === ReconciliationConfigVersionStatus.PUBLISHED) {
-      return version;
+      return version as any as ReconciliationConfigurationVersionResponse;
     }
 
     // Freeze configuration by hashing configuration content
@@ -108,7 +116,7 @@ export class ReconciliationService {
       data: { status: ReconciliationConfigVersionStatus.SUPERSEDED },
     });
 
-    return this.prisma.reconciliationConfigurationVersion.update({
+    const result = await this.prisma.reconciliationConfigurationVersion.update({
       where: { id: versionId },
       data: {
         status: ReconciliationConfigVersionStatus.PUBLISHED,
@@ -117,9 +125,11 @@ export class ReconciliationService {
         publishedByUserId: userId,
       },
     });
+
+    return result as any as ReconciliationConfigurationVersionResponse;
   }
 
-  async triggerRun(jobId: string, configVersionId: string, userId: string, dto: TriggerReconciliationRunDto) {
+  async triggerRun(jobId: string, configVersionId: string, userId: string, dto: TriggerReconciliationRunDto): Promise<AsyncOperationResponse> {
     const configVer = await this.prisma.reconciliationConfigurationVersion.findFirst({
       where: { id: configVersionId, reconciliationJobId: jobId },
     });
@@ -143,13 +153,8 @@ export class ReconciliationService {
     });
 
     return {
-      ...run,
-      totalRecordsCompared: Number(run.totalRecordsCompared),
-      discrepanciesFound: Number(run.discrepanciesFound),
-      missingCount: Number(run.missingCount),
-      orphanCount: Number(run.orphanCount),
-      attributeMismatchCount: Number(run.attributeMismatchCount),
-      aggregateMismatchCount: Number(run.aggregateMismatchCount),
+      id: run.id,
+      status: 'QUEUED',
     };
   }
 
@@ -425,11 +430,15 @@ export class ReconciliationService {
     });
   }
 
-  async getRunDetails(runId: string) {
+  async getRunDetails(runId: string, user: any): Promise<ReconciliationRunResponse> {
     const run = await this.prisma.reconciliationRun.findUnique({
       where: { id: runId },
       include: {
-        reconConfigVersion: true,
+        reconConfigVersion: {
+          include: {
+            reconciliationJob: true,
+          },
+        },
         batches: true,
         observations: {
           include: { discrepancy: true },
@@ -438,7 +447,12 @@ export class ReconciliationService {
     });
     if (!run) throw new NotFoundException('Reconciliation run not found');
 
-    return {
+    const workspaceId = run.reconConfigVersion.reconciliationJob.workspaceId;
+    if (!user.workspaceIds || !user.workspaceIds.includes(workspaceId)) {
+      throw new ForbiddenException(`Cross-workspace access denied: User lacks access to Workspace '${workspaceId}' owning ReconciliationRun '${runId}'.`);
+    }
+
+    const result = {
       ...run,
       totalRecordsCompared: String(run.totalRecordsCompared ?? 0),
       discrepanciesFound: String(run.discrepanciesFound ?? 0),
@@ -447,5 +461,7 @@ export class ReconciliationService {
       attributeMismatchCount: String(run.attributeMismatchCount ?? 0),
       aggregateMismatchCount: String(run.aggregateMismatchCount ?? 0),
     };
+
+    return result as any as ReconciliationRunResponse;
   }
 }

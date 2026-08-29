@@ -3,6 +3,7 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { cleanDatabase } from './cleanup';
 import { MigrationEngineService } from '../src/migration-engine/migration-engine.service';
 import { ErrorCategory, LoadOperation, RecordStatus } from '@edimp/database';
 
@@ -70,60 +71,7 @@ describe('Phase 5 E2E: Migration Engine, Frozen Recipes & Stable Idempotency Tes
     migrationEngineService = app.get(MigrationEngineService);
 
     // Clean DB in cascade order
-    await prisma.aiQueryMessage.deleteMany();
-    await prisma.aiQuerySession.deleteMany();
-    await prisma.aiAnomalyAnalysis.deleteMany();
-    await prisma.aiDriftRepairSuggestion.deleteMany();
-    await prisma.aiMappingSuggestion.deleteMany();
-    await prisma.aiAgentTask.deleteMany();
-
-    await prisma.errorResolutionLog.deleteMany();
-    await prisma.errorManualOverride.deleteMany();
-    await prisma.recordError.deleteMany();
-    await prisma.reconciliationObservation.deleteMany();
-    await prisma.reconciliationDiscrepancy.deleteMany();
-    await prisma.reconciliationBatch.deleteMany();
-    await prisma.reconciliationRun.deleteMany();
-    await prisma.reconciliationConfigurationVersion.deleteMany();
-    await prisma.reconciliationJob.deleteMany();
-    await prisma.migrationRecord.deleteMany();
-    await prisma.jobBatch.deleteMany();
-    await prisma.migrationRun.deleteMany();
-    await prisma.migrationIdentity.deleteMany();
-    await prisma.migrationConfigurationVersion.deleteMany();
-    await prisma.migrationJob.deleteMany();
-    await prisma.pipelineExecutionLog.deleteMany();
-    await prisma.pipelineExecutionRun.deleteMany();
-    await prisma.pipelineJob.deleteMany();
-    await prisma.fieldValidationRule.deleteMany();
-    await prisma.validationVersion.deleteMany();
-    await prisma.validationSet.deleteMany();
-    await prisma.fieldTransformation.deleteMany();
-    await prisma.transformationVersion.deleteMany();
-    await prisma.transformationSet.deleteMany();
-    await prisma.fieldMapping.deleteMany();
-    await prisma.entityMapping.deleteMany();
-    await prisma.mappingVersion.deleteMany();
-    await prisma.mappingSet.deleteMany();
-    await prisma.canonicalField.deleteMany();
-    await prisma.canonicalEntity.deleteMany();
-    await prisma.canonicalModelVersion.deleteMany();
-    await prisma.canonicalModel.deleteMany();
-    await prisma.dataProfileMetric.deleteMany();
-    await prisma.dataProfileRun.deleteMany();
-    await prisma.dataField.deleteMany();
-    await prisma.dataEntity.deleteMany();
-    await prisma.dataModelVersion.deleteMany();
-    await prisma.dataModel.deleteMany();
-    await prisma.credentialReference.deleteMany();
-    await prisma.connection.deleteMany();
-    await prisma.connectorType.deleteMany();
-    await prisma.environment.deleteMany();
-    await prisma.workspaceMember.deleteMany();
-    await prisma.workspace.deleteMany();
-    await prisma.tenantMember.deleteMany();
-    await prisma.tenant.deleteMany();
-    await prisma.user.deleteMany();
+    await cleanDatabase(prisma);
 
     // 1. Create Users & Tenancy
     user1 = await prisma.user.create({ data: { email: 'p5_user1@test.com', name: 'P5 User One' } });
@@ -257,7 +205,7 @@ describe('Phase 5 E2E: Migration Engine, Frozen Recipes & Stable Idempotency Tes
           environmentId: otherEnv.id,
           name: 'Cross Workspace Job',
         })
-        .expect(400);
+        .expect(403);
     });
 
     it('should create a DRAFT MigrationConfigurationVersion binding all 7 references', async () => {
@@ -457,7 +405,8 @@ describe('Phase 5 E2E: Migration Engine, Frozen Recipes & Stable Idempotency Tes
         .send({})
         .expect(202);
 
-      expect(Number(res.body.recordsRetried)).toBe(1);
+      expect(res.body.status).toBe('QUEUED');
+      expect(res.body.id).toBe(failedRun.id);
     });
 
     it('should resume an interrupted migration run via POST /api/v1/migration-runs/:id/resume', async () => {
@@ -468,6 +417,7 @@ describe('Phase 5 E2E: Migration Engine, Frozen Recipes & Stable Idempotency Tes
         .expect(202);
 
       expect(res.body.status).toBe('EXTRACTING');
+      expect(res.body.id).toBe(failedRun.id);
     });
   });
 

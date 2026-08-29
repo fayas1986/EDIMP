@@ -136,6 +136,7 @@ describe('Phase 2 E2E & Isolation Tests', () => {
     it('should create a connection with credentials securely without leaking vaultPath in response', async () => {
       const res = await request(app.getHttpServer())
         .post(`/api/v1/environments/${env1.id}/connections`)
+        .set('x-user-id', user1.id)
         .send({
           connectorTypeId: connectorTypePostgres.id,
           name: 'Postgres Core DB',
@@ -148,16 +149,26 @@ describe('Phase 2 E2E & Isolation Tests', () => {
       connection1 = res.body;
       expect(connection1.id).toBeDefined();
       expect(connection1.name).toBe('Postgres Core DB');
-      expect(connection1.hasCredential).toBe(true);
-      expect(connection1.credentialType).toBe('BASIC');
+      
       // Verify security rule: vaultPath and secrets must NOT be in the API payload response
       expect(connection1.vaultPath).toBeUndefined();
-      expect(connection1.credential?.vaultPath).toBeUndefined();
+      expect((connection1 as any).credential).toBeUndefined();
+
+      // Check database directly to ensure credentials exist and match
+      const dbConn = await prisma.connection.findUnique({
+        where: { id: connection1.id },
+        include: { credential: true }
+      });
+      expect(dbConn).toBeDefined();
+      expect(dbConn?.credential).toBeDefined();
+      expect(dbConn?.credential?.credentialType).toBe('BASIC');
+      expect(dbConn?.credential?.vaultPath).toBe('vault://secrets/db-password-secret-12345');
     });
 
     it('should test connectivity for a connection via POST /api/v1/connections/:id/test', async () => {
       const res = await request(app.getHttpServer())
         .post(`/api/v1/connections/${connection1.id}/test`)
+        .set('x-user-id', user1.id)
         .expect(201);
 
       expect(res.body.success).toBe(true);
@@ -167,6 +178,7 @@ describe('Phase 2 E2E & Isolation Tests', () => {
     it('should prevent cross-tenant/cross-workspace connection access', async () => {
       await request(app.getHttpServer())
         .get(`/api/v1/environments/${env2.id}/connections`)
+        .set('x-user-id', user1.id)
         .expect(403);
     });
   });
@@ -175,6 +187,7 @@ describe('Phase 2 E2E & Isolation Tests', () => {
     it('should create a DataModel with an initial DRAFT version 1', async () => {
       const res = await request(app.getHttpServer())
         .post(`/api/v1/connections/${connection1.id}/data-models`)
+        .set('x-user-id', user1.id)
         .send({
           name: 'Core DataModel',
           description: 'E2E Model',
@@ -191,6 +204,7 @@ describe('Phase 2 E2E & Isolation Tests', () => {
     it('should update DRAFT DataModel version', async () => {
       const res = await request(app.getHttpServer())
         .patch(`/api/v1/data-models/${dataModel1.id}/draft`)
+        .set('x-user-id', user1.id)
         .send({
           name: 'Core DataModel Updated',
         })
@@ -203,6 +217,7 @@ describe('Phase 2 E2E & Isolation Tests', () => {
       const draftVersion = dataModel1.versions[0];
       const res = await request(app.getHttpServer())
         .post(`/api/v1/data-models/${dataModel1.id}/versions/${draftVersion.id}/publish`)
+        .set('x-user-id', user1.id)
         .expect(201);
 
       expect(res.body.status).toBe('PUBLISHED');
@@ -214,11 +229,13 @@ describe('Phase 2 E2E & Isolation Tests', () => {
       // Attempting to re-publish a PUBLISHED version must fail
       await request(app.getHttpServer())
         .post(`/api/v1/data-models/${dataModel1.id}/versions/${draftVersion.id}/publish`)
+        .set('x-user-id', user1.id)
         .expect(400);
 
       // Attempting to modify draft when no DRAFT exists must fail
       await request(app.getHttpServer())
         .patch(`/api/v1/data-models/${dataModel1.id}/draft`)
+        .set('x-user-id', user1.id)
         .send({ name: 'Should Fail' })
         .expect(400);
     });
@@ -237,14 +254,20 @@ describe('Phase 2 E2E & Isolation Tests', () => {
 
       const res = await request(app.getHttpServer())
         .post('/api/v1/data-profile-runs')
+        .set('x-user-id', user1.id)
         .send({ dataModelVersionId: publishedVersionId })
-        .expect(201);
+        .expect(202);
 
       profileRun = res.body;
       expect(profileRun.id).toBeDefined();
       expect(profileRun.status).toBe('QUEUED');
-      expect(profileRun.queuedAt).toBeDefined();
-      expect(profileRun.startedAt).toBeNull();
+
+      const dbRun = await prisma.dataProfileRun.findUnique({
+        where: { id: profileRun.id }
+      });
+      expect(dbRun).toBeDefined();
+      expect(dbRun?.queuedAt).toBeDefined();
+      expect(dbRun?.startedAt).toBeNull();
     });
 
     it('should verify DataProfileService consistency check (valid case)', async () => {

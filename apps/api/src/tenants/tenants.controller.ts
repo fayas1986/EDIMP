@@ -4,7 +4,7 @@ import { TenantsService } from './tenants.service';
 import { CreateTenantDto, UpdateTenantDto } from './dto/tenant.dto';
 import { AuthGuard, RequestUser } from '../common/auth/auth.guard';
 import { CurrentUser } from '../common/auth/current-user.decorator';
-import { PaginationQuerySchema, PaginationQueryDto, PaginatedResult, Tenant } from '@edimp/contracts';
+import { PaginationQuerySchema, PaginationQueryDto, PaginatedResult, TenantResponse } from '@edimp/contracts';
 import { ZodValidationPipe } from 'nestjs-zod';
 
 @ApiTags('Tenants')
@@ -18,7 +18,7 @@ export class TenantsController {
   @ApiOperation({ summary: 'Create a new Tenant' })
   @ApiResponse({ status: 201, description: 'Tenant created successfully' })
   @ApiResponse({ status: 409, description: 'Conflict - Tenant name already exists' })
-  create(@Body() createTenantDto: CreateTenantDto, @CurrentUser() user: RequestUser): Promise<Tenant> {
+  create(@Body() createTenantDto: CreateTenantDto, @CurrentUser() user: RequestUser): Promise<TenantResponse> {
     return this.tenantsService.create(createTenantDto, user);
   }
 
@@ -30,7 +30,7 @@ export class TenantsController {
   findAll(
     @Query(new ZodValidationPipe(PaginationQuerySchema)) query: PaginationQueryDto,
     @CurrentUser() user: RequestUser
-  ): Promise<Tenant[] | PaginatedResult<Tenant>> {
+  ): Promise<PaginatedResult<TenantResponse>> {
     return this.tenantsService.findAll(user, query);
   }
 
@@ -39,7 +39,7 @@ export class TenantsController {
   @ApiResponse({ status: 200, description: 'Tenant details' })
   @ApiResponse({ status: 403, description: 'Forbidden - User does not belong to tenant' })
   @ApiResponse({ status: 404, description: 'Tenant not found' })
-  findOne(@Param('id') id: string, @CurrentUser() user: RequestUser): Promise<Tenant> {
+  findOne(@Param('id') id: string, @CurrentUser() user: RequestUser): Promise<TenantResponse> {
     return this.tenantsService.findOne(id, user);
   }
 
@@ -52,7 +52,7 @@ export class TenantsController {
     @Param('id') id: string, 
     @Body() updateTenantDto: UpdateTenantDto,
     @CurrentUser() user: RequestUser
-  ): Promise<Tenant> {
+  ): Promise<TenantResponse> {
     return this.tenantsService.update(id, updateTenantDto, user);
   }
 
@@ -61,7 +61,7 @@ export class TenantsController {
   @ApiResponse({ status: 200, description: 'Tenant deleted successfully' })
   @ApiResponse({ status: 403, description: 'Forbidden - Requires ADMIN role' })
   @ApiResponse({ status: 404, description: 'Tenant not found' })
-  remove(@Param('id') id: string, @CurrentUser() user: RequestUser): Promise<Tenant> {
+  remove(@Param('id') id: string, @CurrentUser() user: RequestUser): Promise<TenantResponse> {
     return this.tenantsService.remove(id, user);
   }
 }

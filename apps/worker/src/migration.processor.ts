@@ -11,7 +11,7 @@ export class MigrationProcessor extends WorkerHost {
     super();
   }
 
-  async process(job: Job<any, any, string>): Promise<any> {
+  async process(job: any, token?: string): Promise<any> {
     this.logger.log(`[Worker Process] Processing migration job '${job.id}' for Run ID '${job.data.runId}'`);
     
     try {

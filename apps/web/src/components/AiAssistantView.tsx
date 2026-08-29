@@ -286,8 +286,9 @@ export const AiAssistantView: React.FC = () => {
           </div>
           <div className="flex items-center gap-2.5">
             <div className="flex flex-col">
-              <span className="text-[9px] font-black uppercase text-slate-400 block tracking-wider">Engine Provider</span>
+              <label htmlFor="engine-provider-select" className="text-[9px] font-black uppercase text-slate-400 block tracking-wider">Engine Provider</label>
               <select
+                id="engine-provider-select"
                 value={selectedProvider}
                 onChange={(e) => {
                   const val = e.target.value as any;
@@ -306,8 +307,9 @@ export const AiAssistantView: React.FC = () => {
             </div>
 
             <div className="flex flex-col">
-              <span className="text-[9px] font-black uppercase text-slate-400 block tracking-wider">Model Variant</span>
+              <label htmlFor="model-variant-select" className="text-[9px] font-black uppercase text-slate-400 block tracking-wider">Model Variant</label>
               <select
+                id="model-variant-select"
                 value={selectedModel}
                 onChange={(e) => setSelectedModel(e.target.value)}
                 className="px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 focus:outline-none focus:border-indigo-500 cursor-pointer"
@@ -372,6 +374,7 @@ export const AiAssistantView: React.FC = () => {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            aria-label="Chat query input"
             placeholder="Ask AI e.g. How do I normalize phone numbers to E.164 format?"
             className="flex-1 px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-indigo-500"
           />
@@ -431,8 +434,9 @@ export const AiAssistantView: React.FC = () => {
             {/* Filter classification tier */}
             <div className="flex items-center gap-1 bg-slate-50 border border-slate-150 rounded-xl px-2.5 py-1.5 text-xs text-slate-600">
               <Filter className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-              <span className="font-bold mr-1">Tier:</span>
+              <label htmlFor="filter-tier-select" className="font-bold mr-1">Tier:</label>
               <select
+                id="filter-tier-select"
                 value={filterTier}
                 onChange={(e) => setFilterTier(e.target.value)}
                 className="bg-transparent focus:outline-none font-medium text-slate-800"
@@ -463,6 +467,7 @@ export const AiAssistantView: React.FC = () => {
                       step="25"
                       value={latencyThreshold}
                       onChange={(e) => setLatencyThreshold(Number(e.target.value))}
+                      aria-label="SLA Alert Threshold (ms)"
                       className="w-20 h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
                     />
                     <span className="font-mono font-black text-indigo-700 bg-indigo-50 border border-indigo-100 px-1 py-0.5 rounded text-[9px]">
@@ -804,6 +809,7 @@ export const AiAssistantView: React.FC = () => {
               step="1"
               value={monthlyTokenVolume}
               onChange={(e) => setMonthlyTokenVolume(Number(e.target.value))}
+              aria-label="Projected Monthly Tokens (Millions)"
               className="w-36 h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
             />
             <span className="font-mono font-black text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-1 rounded text-[11px]">
@@ -1060,6 +1066,7 @@ export const AiAssistantView: React.FC = () => {
             </div>
             <button
               onClick={() => setToasts((curr) => curr.filter((toast) => toast.id !== t.id))}
+              aria-label="Close warning notification"
               className="text-slate-400 hover:text-white transition-colors cursor-pointer"
             >
               <X className="w-4 h-4" />

@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestUser } from '../common/auth/auth.guard';
-import { CreateCanonicalModelDto, UpdateCanonicalModelDto, PaginationQueryDto, PaginatedResult, CanonicalModel } from '@edimp/contracts';
+import { CreateCanonicalModelDto, UpdateCanonicalModelDto, PaginationQueryDto, PaginatedResult, CanonicalModelResponse, CanonicalModelVersionResponse } from '@edimp/contracts';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -51,7 +51,7 @@ export class CanonicalModelsService {
     return crypto.createHash('sha256').update(JSON.stringify(canonicalized)).digest('hex');
   }
 
-  async create(workspaceId: string, dto: CreateCanonicalModelDto, user: RequestUser) {
+  async create(workspaceId: string, dto: CreateCanonicalModelDto, user: RequestUser): Promise<CanonicalModelResponse> {
     await this.verifyWorkspaceAccess(workspaceId, user.id);
 
     const existing = await this.prisma.canonicalModel.findFirst({
@@ -62,7 +62,7 @@ export class CanonicalModelsService {
       throw new ConflictException(`CanonicalModel with name '${dto.name}' already exists in this workspace`);
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const canonicalModel = await tx.canonicalModel.create({
         data: {
           workspaceId,
@@ -79,25 +79,27 @@ export class CanonicalModelsService {
         },
       });
 
-      for (const entity of dto.entities || []) {
-        const createdEntity = await tx.canonicalEntity.create({
-          data: {
-            canonicalModelVersionId: version.id,
-            name: entity.name,
-            description: entity.description,
-          },
-        });
-
-        if (entity.fields && entity.fields.length > 0) {
-          await tx.canonicalField.createMany({
-            data: entity.fields.map(f => ({
-              canonicalEntityId: createdEntity.id,
-              name: f.name,
-              dataType: (f.dataType as any) || 'UNKNOWN',
-              isNullable: f.isNullable ?? true,
-              isPrimaryKey: f.isPrimaryKey ?? false,
-            })),
+      if (dto.entities && dto.entities.length > 0) {
+        for (const entity of dto.entities) {
+          const createdEntity = await tx.canonicalEntity.create({
+            data: {
+              canonicalModelVersionId: version.id,
+              name: entity.name,
+              description: entity.description,
+            },
           });
+
+          if (entity.fields && entity.fields.length > 0) {
+            await tx.canonicalField.createMany({
+              data: entity.fields.map(f => ({
+                canonicalEntityId: createdEntity.id,
+                name: f.name,
+                dataType: (f.dataType as any) || 'UNKNOWN',
+                isNullable: f.isNullable ?? true,
+                isPrimaryKey: f.isPrimaryKey ?? false,
+              })),
+            });
+          }
         }
       }
 
@@ -105,6 +107,7 @@ export class CanonicalModelsService {
         where: { id: canonicalModel.id },
         include: {
           versions: {
+            orderBy: { version: 'desc' },
             include: {
               entities: {
                 include: { fields: true },
@@ -114,27 +117,21 @@ export class CanonicalModelsService {
         },
       });
     });
+
+    if (!result) {
+      throw new NotFoundException(`CanonicalModel not found after creation`);
+    }
+
+    return result as any as CanonicalModelResponse;
   }
 
-  async findAll(workspaceId: string, user: RequestUser, query?: PaginationQueryDto): Promise<any[] | PaginatedResult<any>> {
+  async findAll(workspaceId: string, user: RequestUser, query?: PaginationQueryDto): Promise<PaginatedResult<CanonicalModelResponse>> {
     await this.verifyWorkspaceAccess(workspaceId, user.id);
 
     const where = { workspaceId, deletedAt: null };
 
-    if (!query?.page && !query?.pageSize) {
-      return this.prisma.canonicalModel.findMany({
-        where,
-        include: {
-          versions: {
-            orderBy: { version: 'desc' },
-            take: 1,
-          },
-        },
-      });
-    }
-
-    const page = query.page || 1;
-    const pageSize = query.pageSize || 20;
+    const page = query?.page || 1;
+    const pageSize = query?.pageSize || 20;
 
     const [data, totalItems] = await Promise.all([
       this.prisma.canonicalModel.findMany({
@@ -145,6 +142,11 @@ export class CanonicalModelsService {
           versions: {
             orderBy: { version: 'desc' },
             take: 1,
+            include: {
+              entities: {
+                include: { fields: true },
+              },
+            },
           },
         },
       }),
@@ -152,17 +154,17 @@ export class CanonicalModelsService {
     ]);
 
     return {
-      data,
+      data: data as any as CanonicalModelResponse[],
       pagination: {
         page,
         pageSize,
         totalItems,
-        totalPages: Math.ceil(totalItems / pageSize),
+        totalPages: Math.ceil(totalItems / pageSize) || 1,
       },
     };
   }
 
-  async findOne(id: string, user: RequestUser) {
+  async findOne(id: string, user: RequestUser): Promise<CanonicalModelResponse> {
     const model = await this.prisma.canonicalModel.findFirst({
       where: { id, deletedAt: null },
       include: {
@@ -182,18 +184,18 @@ export class CanonicalModelsService {
     }
 
     await this.verifyWorkspaceAccess(model.workspaceId, user.id);
-    return model;
+    return model as any as CanonicalModelResponse;
   }
 
-  async updateDraft(id: string, dto: UpdateCanonicalModelDto, user: RequestUser) {
+  async updateDraft(id: string, dto: UpdateCanonicalModelDto, user: RequestUser): Promise<CanonicalModelResponse> {
     const model = await this.findOne(id, user);
 
-    const latestVersion = model.versions[0];
+    const latestVersion = (model as any).versions[0];
     if (!latestVersion || latestVersion.status !== 'DRAFT') {
       throw new BadRequestException(`Cannot update CanonicalModel ${id}: no DRAFT version exists. Modifying published versions is prohibited.`);
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       if (dto.name) {
         await tx.canonicalModel.update({
           where: { id },
@@ -243,12 +245,18 @@ export class CanonicalModelsService {
         },
       });
     });
+
+    if (!result) {
+      throw new NotFoundException(`CanonicalModel not found after update`);
+    }
+
+    return result as any as CanonicalModelResponse;
   }
 
-  async publishVersion(canonicalModelId: string, versionId: string, user: RequestUser) {
+  async publishVersion(canonicalModelId: string, versionId: string, user: RequestUser): Promise<CanonicalModelVersionResponse> {
     const model = await this.findOne(canonicalModelId, user);
 
-    const targetVersion = model.versions.find(v => v.id === versionId);
+    const targetVersion = (model as any).versions.find((v: any) => v.id === versionId);
     if (!targetVersion) {
       throw new NotFoundException(`CanonicalModelVersion ${versionId} not found`);
     }
@@ -259,7 +267,7 @@ export class CanonicalModelsService {
 
     const definitionHash = this.computeDefinitionHash(targetVersion.entities || []);
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       // 1. Pessimistic Row Lock on CanonicalModel to prevent race conditions
       await tx.$executeRawUnsafe(
         `SELECT id FROM "CanonicalModel" WHERE id = $1 FOR UPDATE`,
@@ -295,5 +303,7 @@ export class CanonicalModelsService {
 
       return published;
     });
+
+    return result as any as CanonicalModelVersionResponse;
   }
 }

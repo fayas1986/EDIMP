@@ -3,13 +3,14 @@ import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse, ApiQuery } from '@ne
 import { EnvironmentsService } from './environments.service';
 import { CreateEnvironmentDto, UpdateEnvironmentDto } from './dto/environment.dto';
 import { AuthGuard, RequestUser } from '../common/auth/auth.guard';
+import { TenantWorkspaceGuard } from '../common/guards/tenant.guard';
 import { CurrentUser } from '../common/auth/current-user.decorator';
-import { PaginationQuerySchema, PaginationQueryDto, PaginatedResult, Environment } from '@edimp/contracts';
+import { PaginationQuerySchema, PaginationQueryDto, PaginatedResult, EnvironmentResponse } from '@edimp/contracts';
 import { ZodValidationPipe } from 'nestjs-zod';
 
 @ApiTags('Environments')
 @ApiBearerAuth()
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, TenantWorkspaceGuard)
 @Controller('workspaces/:workspaceId/environments')
 export class EnvironmentsController {
   constructor(private readonly environmentsService: EnvironmentsService) {}
@@ -23,7 +24,7 @@ export class EnvironmentsController {
     @Param('workspaceId') workspaceId: string,
     @Body() createEnvironmentDto: CreateEnvironmentDto, 
     @CurrentUser() user: RequestUser
-  ): Promise<Environment> {
+  ): Promise<EnvironmentResponse> {
     return this.environmentsService.create(workspaceId, createEnvironmentDto, user);
   }
 
@@ -37,7 +38,7 @@ export class EnvironmentsController {
     @Param('workspaceId') workspaceId: string,
     @Query(new ZodValidationPipe(PaginationQuerySchema)) query: PaginationQueryDto,
     @CurrentUser() user: RequestUser
-  ): Promise<Environment[] | PaginatedResult<Environment>> {
+  ): Promise<PaginatedResult<EnvironmentResponse>> {
     return this.environmentsService.findAll(workspaceId, user, query);
   }
 
@@ -50,7 +51,7 @@ export class EnvironmentsController {
     @Param('workspaceId') workspaceId: string,
     @Param('id') id: string, 
     @CurrentUser() user: RequestUser
-  ): Promise<Environment> {
+  ): Promise<EnvironmentResponse> {
     return this.environmentsService.findOne(workspaceId, id, user);
   }
 
@@ -64,7 +65,7 @@ export class EnvironmentsController {
     @Param('id') id: string, 
     @Body() updateEnvironmentDto: UpdateEnvironmentDto,
     @CurrentUser() user: RequestUser
-  ): Promise<Environment> {
+  ): Promise<EnvironmentResponse> {
     return this.environmentsService.update(workspaceId, id, updateEnvironmentDto, user);
   }
 
@@ -77,7 +78,7 @@ export class EnvironmentsController {
     @Param('workspaceId') workspaceId: string,
     @Param('id') id: string, 
     @CurrentUser() user: RequestUser
-  ): Promise<Environment> {
+  ): Promise<EnvironmentResponse> {
     return this.environmentsService.remove(workspaceId, id, user);
   }
 }

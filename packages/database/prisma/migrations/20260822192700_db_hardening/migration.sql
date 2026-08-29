@@ -1,0 +1,263 @@
+-- DropIndex
+DROP INDEX "DataProfileMetric_dataProfileRunId_idx";
+
+-- AlterTable
+ALTER TABLE "AiAgentTask" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "updatedAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "AiAnomalyAnalysis" ALTER COLUMN "reviewedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "AiDriftRepairSuggestion" ALTER COLUMN "approvedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "AiMappingSuggestion" ALTER COLUMN "acceptedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "rejectedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "AiQueryMessage" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "AiQuerySession" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "updatedAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "AuditLog" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "CanonicalEntity" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "CanonicalField" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "CanonicalModel" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "updatedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "deletedAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "CanonicalModelVersion" ALTER COLUMN "publishedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "Connection" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "updatedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "deletedAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "ConnectorType" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "updatedAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "CredentialReference" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "updatedAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "DataEntity" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "DataField" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "DataModel" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "updatedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "deletedAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "DataModelVersion" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "DataProfileMetric" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "DataProfileRun" ALTER COLUMN "queuedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "startedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "completedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "EntityMapping" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "Environment" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "updatedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "deletedAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "ErrorManualOverride" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "ErrorResolutionLog" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "FieldMapping" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "FieldTransformation" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "FieldValidationRule" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "JobBatch" ALTER COLUMN "workerHeartbeatAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "leaseExpiresAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "startedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "completedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "MappingSet" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "updatedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "deletedAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "MappingVersion" ALTER COLUMN "publishedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "MigrationConfigurationVersion" ALTER COLUMN "publishedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "MigrationIdentity" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "updatedAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "MigrationJob" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "updatedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "deletedAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "MigrationRecord" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "updatedAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "MigrationRun" ALTER COLUMN "workerHeartbeatAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "leaseExpiresAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "queuedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "startedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "completedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "PipelineExecutionLog" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "PipelineExecutionRun" ALTER COLUMN "queuedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "startedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "completedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "PipelineJob" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "updatedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "deletedAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "ReconciliationBatch" ALTER COLUMN "startedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "completedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "ReconciliationConfigurationVersion" ALTER COLUMN "publishedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "ReconciliationDiscrepancy" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "updatedAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "ReconciliationJob" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "updatedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "deletedAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "ReconciliationObservation" ALTER COLUMN "observedAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "ReconciliationRun" ALTER COLUMN "workerHeartbeatAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "leaseExpiresAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "startedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "completedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "RecordError" ALTER COLUMN "resolvedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "Tenant" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "updatedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "deletedAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "TenantMember" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "updatedAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "TransformationSet" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "updatedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "deletedAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "TransformationVersion" ALTER COLUMN "publishedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "User" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "updatedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "deletedAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "ValidationSet" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "updatedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "deletedAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "ValidationVersion" ALTER COLUMN "publishedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "WorkerNode" ALTER COLUMN "lastHeartbeatAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "updatedAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "Workspace" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "updatedAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "deletedAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "WorkspaceMember" ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "updatedAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- CreateIndex
+CREATE INDEX "Connection_environmentId_idx" ON "Connection"("environmentId");
+
+-- CreateIndex
+CREATE INDEX "DataModel_connectionId_idx" ON "DataModel"("connectionId");
+
+-- CreateIndex
+CREATE INDEX "MappingVersion_canonicalModelVersionId_idx" ON "MappingVersion"("canonicalModelVersionId");
+
+-- CreateIndex
+CREATE INDEX "MappingVersion_dataModelVersionId_idx" ON "MappingVersion"("dataModelVersionId");
+
+-- CreateIndex
+CREATE INDEX "MigrationConfigurationVersion_sourceConnectionId_idx" ON "MigrationConfigurationVersion"("sourceConnectionId");
+
+-- CreateIndex
+CREATE INDEX "MigrationConfigurationVersion_targetConnectionId_idx" ON "MigrationConfigurationVersion"("targetConnectionId");
+
+-- CreateIndex
+CREATE INDEX "MigrationConfigurationVersion_mappingVersionId_idx" ON "MigrationConfigurationVersion"("mappingVersionId");
+
+-- CreateIndex
+CREATE INDEX "ReconciliationDiscrepancy_sourceRecordId_idx" ON "ReconciliationDiscrepancy"("sourceRecordId");
+
+-- CreateIndex
+CREATE INDEX "ReconciliationDiscrepancy_targetRecordId_idx" ON "ReconciliationDiscrepancy"("targetRecordId");

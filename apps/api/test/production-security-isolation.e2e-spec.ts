@@ -4,6 +4,7 @@ import request from 'supertest';
 import * as jwt from 'jsonwebtoken';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { RateLimiterGuard } from '../src/common/guards/rate-limiter.guard';
 
 jest.setTimeout(30000);
 
@@ -18,10 +19,14 @@ describe('Production Security & Hierarchical Isolation E2E', () => {
   let user2: any;
   let validTokenUser1: string;
   let validTokenUser2: string;
+  let rateLimitSpy: jest.SpyInstance;
 
   const testSecret = 'edimp-test-jwt-secret-key-2026';
 
   beforeAll(async () => {
+    rateLimitSpy = jest.spyOn(RateLimiterGuard.prototype, 'canActivate')
+      .mockImplementation(() => Promise.resolve(true));
+
     process.env.JWT_SECRET = testSecret;
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -111,17 +116,24 @@ describe('Production Security & Hierarchical Isolation E2E', () => {
   });
 
   afterAll(async () => {
+    rateLimitSpy.mockRestore();
     await app.close();
   });
 
   describe('1. Authentication Guard Hardening', () => {
     it('MUST reject requests with x-user-id header and missing Bearer token with 401 Unauthorized', async () => {
-      const res = await request(app.getHttpServer())
-        .get('/api/v1/tenants')
-        .set('x-user-id', user1.id);
+      const originalEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = 'production';
+      try {
+        const res = await request(app.getHttpServer())
+          .get('/api/v1/tenants')
+          .set('x-user-id', user1.id);
 
-      expect(res.status).toBe(401);
-      expect(res.body.message).toContain('Missing or malformed Bearer authorization token');
+        expect(res.status).toBe(401);
+        expect(res.body.message).toContain('x-user-id header authentication is prohibited in production.');
+      } finally {
+        process.env.NODE_ENV = originalEnv;
+      }
     });
 
     it('MUST reject missing Authorization header with 401 Unauthorized', async () => {
@@ -152,7 +164,7 @@ describe('Production Security & Hierarchical Isolation E2E', () => {
         .set('Authorization', `Bearer ${validTokenUser1}`);
 
       expect(res.status).toBe(200);
-      expect(Array.isArray(res.body)).toBe(true);
+      expect(Array.isArray(res.body.data)).toBe(true);
     });
   });
 

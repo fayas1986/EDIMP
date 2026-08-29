@@ -3,6 +3,7 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { cleanDatabase } from './cleanup';
 import { ReconciliationService } from '../src/reconciliation/reconciliation.service';
 import { ErrorManagementService } from '../src/error-management/error-management.service';
 import { MigrationEngineService } from '../src/migration-engine/migration-engine.service';
@@ -50,6 +51,22 @@ describe('Phase 6 E2E: Reconciliation Engine & Error Management Tests', () => {
   let migrationJob1: any;
   let migrationConfigVersion1: any;
 
+  const waitForReconRunCompletion = async (runId: string, maxWaitMs = 8000): Promise<any> => {
+    const startTime = Date.now();
+    while (Date.now() - startTime < maxWaitMs) {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/reconciliation-jobs/runs/${runId}`)
+        .set('x-user-id', user1.id);
+      if (res.body && (res.body.status === 'COMPLETED' || res.body.status === 'FAILED')) {
+        return res;
+      }
+      await new Promise((res) => setTimeout(res, 100));
+    }
+    return await request(app.getHttpServer())
+      .get(`/api/v1/reconciliation-jobs/runs/${runId}`)
+      .set('x-user-id', user1.id);
+  };
+
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -65,28 +82,7 @@ describe('Phase 6 E2E: Reconciliation Engine & Error Management Tests', () => {
     migrationEngineService = app.get(MigrationEngineService);
 
     // Database cleanup in strict reverse dependency order
-    await prisma.aiQueryMessage.deleteMany({});
-    await prisma.aiQuerySession.deleteMany({});
-    await prisma.aiAnomalyAnalysis.deleteMany({});
-    await prisma.aiDriftRepairSuggestion.deleteMany({});
-    await prisma.aiMappingSuggestion.deleteMany({});
-    await prisma.aiAgentTask.deleteMany({});
-
-    await prisma.errorResolutionLog.deleteMany({});
-    await prisma.errorManualOverride.deleteMany({});
-    await prisma.recordError.deleteMany({});
-    await prisma.reconciliationObservation.deleteMany({});
-    await prisma.reconciliationDiscrepancy.deleteMany({});
-    await prisma.reconciliationBatch.deleteMany({});
-    await prisma.reconciliationRun.deleteMany({});
-    await prisma.reconciliationConfigurationVersion.deleteMany({});
-    await prisma.reconciliationJob.deleteMany({});
-    await prisma.migrationRecord.deleteMany({});
-    await prisma.jobBatch.deleteMany({});
-    await prisma.migrationRun.deleteMany({});
-    await prisma.migrationIdentity.deleteMany({});
-    await prisma.migrationConfigurationVersion.deleteMany({});
-    await prisma.migrationJob.deleteMany({});
+    await cleanDatabase(prisma);
 
     // Setup fixture data
     user1 = await prisma.user.create({ data: { email: 'p6user1@edimp.io', name: 'Phase6 User 1' } });
@@ -286,16 +282,11 @@ describe('Phase 6 E2E: Reconciliation Engine & Error Management Tests', () => {
         sampleSourceRecords: sourceRecords,
         sampleTargetRecords: targetRecords,
       })
-      .expect(201);
+      .expect(202);
 
     const runId = runRes.body.id;
 
-    // Wait 500ms for async worker execution
-    await new Promise((r) => setTimeout(r, 500));
-
-    const detailsRes = await request(app.getHttpServer())
-      .get(`/api/v1/reconciliation-jobs/runs/${runId}`)
-      .expect(200);
+    const detailsRes = await waitForReconRunCompletion(runId);
 
     expect(detailsRes.body.status).toBe('COMPLETED');
     expect(Number(detailsRes.body.missingCount)).toBe(1); // C300
@@ -345,13 +336,9 @@ describe('Phase 6 E2E: Reconciliation Engine & Error Management Tests', () => {
       .post(`/api/v1/reconciliation-jobs/${job.id}/versions/${configVer.id}/execute`)
       .set('x-user-id', user1.id)
       .send({ sampleSourceRecords: sourceRecords, sampleTargetRecords: [] })
-      .expect(201);
+      .expect(202);
 
-    await new Promise((r) => setTimeout(r, 400));
-
-    const detailsRes = await request(app.getHttpServer())
-      .get(`/api/v1/reconciliation-jobs/runs/${runRes.body.id}`)
-      .expect(200);
+    const detailsRes = await waitForReconRunCompletion(runRes.body.id);
 
     expect(Number(detailsRes.body.totalRecordsCompared)).toBe(1);
   });
@@ -384,13 +371,9 @@ describe('Phase 6 E2E: Reconciliation Engine & Error Management Tests', () => {
       .post(`/api/v1/reconciliation-jobs/${job.id}/versions/${configVer.id}/execute`)
       .set('x-user-id', user1.id)
       .send({ sampleSourceRecords: sourceRecords, sampleTargetRecords: [] })
-      .expect(201);
+      .expect(202);
 
-    await new Promise((r) => setTimeout(r, 400));
-
-    const detailsRes = await request(app.getHttpServer())
-      .get(`/api/v1/reconciliation-jobs/runs/${runRes.body.id}`)
-      .expect(200);
+    const detailsRes = await waitForReconRunCompletion(runRes.body.id);
 
     expect(Number(detailsRes.body.totalRecordsCompared)).toBeGreaterThan(0);
     expect(Number(detailsRes.body.totalRecordsCompared)).toBeLessThan(10);
@@ -420,13 +403,17 @@ describe('Phase 6 E2E: Reconciliation Engine & Error Management Tests', () => {
       .post(`/api/v1/reconciliation-jobs/${job.id}/versions/${configVer.id}/execute`)
       .set('x-user-id', user1.id)
       .send({ sampleSourceRecords: [{ id: '1' }], sampleTargetRecords: [{ id: '1' }] })
-      .expect(201);
+      .expect(202);
 
-    await new Promise((r) => setTimeout(r, 400));
-
-    const batches = await prisma.reconciliationBatch.findMany({
-      where: { reconciliationRunId: runRes.body.id },
-    });
+    let batches = [];
+    const startTime = Date.now();
+    while (Date.now() - startTime < 8000) {
+      batches = await prisma.reconciliationBatch.findMany({
+        where: { reconciliationRunId: runRes.body.id },
+      });
+      if (batches.length > 0) break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
 
     expect(batches.length).toBeGreaterThan(0);
     expect(batches[0].checkpointCursor).toBeDefined();
@@ -460,18 +447,18 @@ describe('Phase 6 E2E: Reconciliation Engine & Error Management Tests', () => {
       .post(`/api/v1/reconciliation-jobs/${job.id}/versions/${configVer.id}/execute`)
       .set('x-user-id', user1.id)
       .send({ sampleSourceRecords: sourceRecords, sampleTargetRecords: [] })
-      .expect(201);
+      .expect(202);
 
-    await new Promise((r) => setTimeout(r, 400));
+    await waitForReconRunCompletion(run1.body.id);
 
     // Run 2 -> Observation state should be PERSISTED
     const run2 = await request(app.getHttpServer())
       .post(`/api/v1/reconciliation-jobs/${job.id}/versions/${configVer.id}/execute`)
       .set('x-user-id', user1.id)
       .send({ sampleSourceRecords: sourceRecords, sampleTargetRecords: [] })
-      .expect(201);
+      .expect(202);
 
-    await new Promise((r) => setTimeout(r, 400));
+    await waitForReconRunCompletion(run2.body.id);
 
     const obs1 = await prisma.reconciliationObservation.findFirst({
       where: { reconciliationRunId: run1.body.id },
@@ -539,7 +526,7 @@ describe('Phase 6 E2E: Reconciliation Engine & Error Management Tests', () => {
 
     expect(overrideRes.body.overridePayload.taxNo).toBe('VALID-TAX-123');
 
-    const errDetails = await errorService.getErrorDetails(error.id);
+    const errDetails = await errorService.getErrorDetails(error.id, user1);
     expect(errDetails.resolutionStatus).toBe(ErrorResolutionStatus.RESOLVED_MANUAL_OVERRIDE);
 
     // Scenario 14: Replay via Phase 5 Migration Engine

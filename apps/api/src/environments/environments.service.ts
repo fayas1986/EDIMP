@@ -37,7 +37,7 @@ export class EnvironmentsService {
     });
   }
 
-  async findAll(workspaceId: string, user: RequestUser, query?: PaginationQueryDto): Promise<Environment[] | PaginatedResult<Environment>> {
+  async findAll(workspaceId: string, user: RequestUser, query?: PaginationQueryDto): Promise<PaginatedResult<Environment>> {
     const workspaceMember = await this.prisma.workspaceMember.findFirst({
       where: { workspaceId, userId: user.id },
     });
@@ -51,12 +51,8 @@ export class EnvironmentsService {
       deletedAt: null,
     };
 
-    if (!query?.page && !query?.pageSize) {
-      return this.prisma.environment.findMany({ where });
-    }
-
-    const page = query.page || 1;
-    const pageSize = query.pageSize || 20;
+    const page = query?.page || 1;
+    const pageSize = query?.pageSize || 20;
 
     const [data, totalItems] = await Promise.all([
       this.prisma.environment.findMany({
@@ -73,7 +69,7 @@ export class EnvironmentsService {
         page,
         pageSize,
         totalItems,
-        totalPages: Math.ceil(totalItems / pageSize),
+        totalPages: Math.ceil(totalItems / pageSize) || 1,
       },
     };
   }

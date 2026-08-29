@@ -437,14 +437,19 @@ describe('Phase 4 E2E: Transformation & Validation Engine Tests', () => {
             { firstName: 'Bob', lastName: 'Jones', email: 'BOB.JONES@EXAMPLE.COM' },
           ],
         })
-        .expect(201);
+        .expect(202);
 
       const run = res.body;
       expect(run.id).toBeDefined();
       expect(run.status).toBe('QUEUED');
-      expect(run.mappingVersionId).toBe(mappingVersion1.id);
-      expect(run.transformationVersionId).toBe(transformationVersionPublished1.id);
-      expect(run.validationVersionId).toBe(validationVersionPublished1.id);
+
+      const dbRun = await prisma.pipelineExecutionRun.findUnique({
+        where: { id: run.id },
+      });
+      expect(dbRun).toBeDefined();
+      expect(dbRun?.mappingVersionId).toBe(mappingVersion1.id);
+      expect(dbRun?.transformationVersionId).toBe(transformationVersionPublished1.id);
+      expect(dbRun?.validationVersionId).toBe(validationVersionPublished1.id);
 
       // Wait 500ms for async worker execution
       await new Promise((resolve) => setTimeout(resolve, 500));

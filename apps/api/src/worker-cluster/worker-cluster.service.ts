@@ -4,7 +4,7 @@ import {
   OnApplicationShutdown,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { RegisterWorkerHeartbeatDto } from '@edimp/contracts';
+import { RegisterWorkerHeartbeatDto, WorkerNodeResponse, AsyncOperationResponse } from '@edimp/contracts';
 import { WorkerStatus } from '@edimp/database';
 import { ObservabilityService } from '../observability/observability.service';
 
@@ -21,7 +21,7 @@ export class WorkerClusterService implements OnApplicationShutdown {
   /**
    * Register or send heartbeat for a worker process (Health/Lifecycle ONLY)
    */
-  async registerWorkerHeartbeat(dto: RegisterWorkerHeartbeatDto) {
+  async registerWorkerHeartbeat(dto: RegisterWorkerHeartbeatDto): Promise<WorkerNodeResponse> {
     this.currentWorkerId = dto.workerId;
     const now = new Date();
 
@@ -48,26 +48,28 @@ export class WorkerClusterService implements OnApplicationShutdown {
     this.observabilityService.setGauge('edimp_active_workers', 1, { worker_pool: 'default' });
     this.observabilityService.setGauge('edimp_worker_heartbeat_age_seconds', 0, { worker_pool: 'default' });
 
-    return worker;
+    return worker as any as WorkerNodeResponse;
   }
 
   /**
    * List all registered worker nodes
    */
-  async listWorkerNodes() {
-    return this.prisma.workerNode.findMany({
+  async listWorkerNodes(): Promise<WorkerNodeResponse[]> {
+    const nodes = await this.prisma.workerNode.findMany({
       orderBy: { lastHeartbeatAt: 'desc' },
     });
+    return nodes as any as WorkerNodeResponse[];
   }
 
   /**
    * Update worker status (e.g. DRAINING, STOPPED)
    */
-  async updateWorkerStatus(workerId: string, status: WorkerStatus) {
-    return this.prisma.workerNode.update({
+  async updateWorkerStatus(workerId: string, status: WorkerStatus): Promise<WorkerNodeResponse> {
+    const node = await this.prisma.workerNode.update({
       where: { workerId },
       data: { status },
     });
+    return node as any as WorkerNodeResponse;
   }
 
   /**
@@ -93,7 +95,7 @@ export class WorkerClusterService implements OnApplicationShutdown {
   /**
    * Replay DLQ Item: Creates a NEW recovery execution context without destroying original history
    */
-  async replayDlqBatch(batchId: string) {
+  async replayDlqBatch(batchId: string): Promise<AsyncOperationResponse> {
     const originalBatch = await this.prisma.jobBatch.findUnique({
       where: { id: batchId },
       include: { migrationRun: true },
@@ -123,10 +125,8 @@ export class WorkerClusterService implements OnApplicationShutdown {
     this.logger.log(`Created new DLQ Recovery Run ${recoveryRun.id} and Batch ${recoveryBatch.id} from original ${originalBatch.id}`);
 
     return {
-      originalBatchId: originalBatch.id,
-      recoveryRunId: recoveryRun.id,
-      recoveryBatchId: recoveryBatch.id,
-      status: 'REPLAY_SCHEDULED',
+      id: recoveryRun.id,
+      status: 'QUEUED',
     };
   }
 

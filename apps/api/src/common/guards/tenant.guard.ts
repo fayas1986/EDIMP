@@ -14,19 +14,31 @@ export class TenantWorkspaceGuard implements CanActivate {
       throw new UnauthorizedException('Unauthenticated user context.');
     }
 
-    const tenantId = request.params?.tenantId || request.body?.tenantId || request.query?.tenantId;
-    const workspaceId = request.params?.workspaceId || request.body?.workspaceId || request.query?.workspaceId;
-    const environmentId = request.params?.environmentId || request.body?.environmentId || request.query?.environmentId;
+    const tenantId = request.params?.tenantId || request.body?.tenantId || request.query?.tenantId || request.headers['x-tenant-id'];
+    const workspaceId = request.params?.workspaceId || request.body?.workspaceId || request.query?.workspaceId || request.headers['x-workspace-id'];
+    const environmentId = request.params?.environmentId || request.body?.environmentId || request.query?.environmentId || request.headers['x-environment-id'];
 
-    if (tenantId) {
-      if (!user.tenantIds || !user.tenantIds.includes(tenantId)) {
-        throw new ForbiddenException(`Cross-tenant access denied: User '${user.email}' lacks access to Tenant '${tenantId}'.`);
+    const path = request.route?.path || '';
+    let resolvedTenantId = tenantId;
+    let resolvedWorkspaceId = workspaceId;
+
+    if (request.params?.id) {
+      if (path.includes('/tenants/:id')) {
+        resolvedTenantId = request.params.id;
+      } else if (path.includes('/workspaces/:id')) {
+        resolvedWorkspaceId = request.params.id;
       }
     }
 
-    if (workspaceId) {
-      if (!user.workspaceIds || !user.workspaceIds.includes(workspaceId)) {
-        throw new ForbiddenException(`Cross-workspace access denied: User '${user.email}' lacks access to Workspace '${workspaceId}'.`);
+    if (resolvedTenantId) {
+      if (!user.tenantIds || !user.tenantIds.includes(resolvedTenantId)) {
+        throw new ForbiddenException(`Cross-tenant access denied: User '${user.email}' lacks access to Tenant '${resolvedTenantId}'.`);
+      }
+    }
+
+    if (resolvedWorkspaceId) {
+      if (!user.workspaceIds || !user.workspaceIds.includes(resolvedWorkspaceId)) {
+        throw new ForbiddenException(`Cross-workspace access denied: User '${user.email}' lacks access to Workspace '${resolvedWorkspaceId}'.`);
       }
     }
 

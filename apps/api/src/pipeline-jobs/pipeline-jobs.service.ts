@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestUser } from '../common/auth/auth.guard';
-import { CreatePipelineJobDto, PreviewTransformDto, PaginationQueryDto, PaginatedResult } from '@edimp/contracts';
+import { CreatePipelineJobDto, PreviewTransformDto, PaginationQueryDto, PaginatedResult, PipelineJobResponse, PipelineExecutionRunResponse, AsyncOperationResponse, PreviewTransformResponse } from '@edimp/contracts';
 import { TransformationEngineService } from '../transformations/transformation-engine.service';
 import { ValidationEngineService } from '../validations/validation-engine.service';
 import { PipelineQueueService } from './pipeline-queue.service';
@@ -54,7 +54,7 @@ export class PipelineJobsService {
     };
   }
 
-  async create(workspaceId: string, dto: CreatePipelineJobDto, user: RequestUser) {
+  async create(workspaceId: string, dto: CreatePipelineJobDto, user: RequestUser): Promise<PipelineJobResponse> {
     await this.verifyWorkspaceAccess(workspaceId, user.id);
 
     // 1. Verify Environment belongs to Workspace
@@ -109,7 +109,7 @@ export class PipelineJobsService {
       throw new ConflictException(`PipelineJob with name '${dto.name}' already exists in this workspace`);
     }
 
-    return this.prisma.pipelineJob.create({
+    const job = await this.prisma.pipelineJob.create({
       data: {
         workspaceId,
         environmentId: dto.environmentId,
@@ -126,9 +126,11 @@ export class PipelineJobsService {
         validationVersion: true,
       },
     });
+
+    return job as any as PipelineJobResponse;
   }
 
-  async preview(workspaceId: string, dto: PreviewTransformDto, user: RequestUser) {
+  async preview(workspaceId: string, dto: PreviewTransformDto, user: RequestUser): Promise<PreviewTransformResponse> {
     await this.verifyWorkspaceAccess(workspaceId, user.id);
 
     // Preview accepts DRAFT or PUBLISHED versions
@@ -196,7 +198,7 @@ export class PipelineJobsService {
     };
   }
 
-  async executeRun(jobId: string, user: RequestUser, payloadInput?: { records?: any[]; lookupTables?: any }) {
+  async executeRun(jobId: string, user: RequestUser, payloadInput?: { records?: any[]; lookupTables?: any }): Promise<AsyncOperationResponse> {
     const job = await this.prisma.pipelineJob.findFirst({
       where: { id: jobId, deletedAt: null },
       include: {
@@ -251,30 +253,21 @@ export class PipelineJobsService {
       lookupTables: payloadInput?.lookupTables || {},
     });
 
-    return this.serializeRun(run);
+    return {
+      id: run.id,
+      status: 'QUEUED',
+    };
   }
 
-  async findAll(workspaceId: string, user: RequestUser, query?: PaginationQueryDto): Promise<any[] | PaginatedResult<any>> {
+  async findAll(workspaceId: string, user: RequestUser, query?: PaginationQueryDto): Promise<PaginatedResult<PipelineJobResponse>> {
     await this.verifyWorkspaceAccess(workspaceId, user.id);
 
     const where = { workspaceId, deletedAt: null };
 
-    if (!query?.page && !query?.pageSize) {
-      return this.prisma.pipelineJob.findMany({
-        where,
-        include: {
-          environment: true,
-          mappingVersion: true,
-          transformationVersion: true,
-          validationVersion: true,
-        },
-      });
-    }
+    const page = query?.page || 1;
+    const pageSize = query?.pageSize || 20;
 
-    const page = query.page || 1;
-    const pageSize = query.pageSize || 20;
-
-    const [data, totalItems] = await Promise.all([
+    const [jobs, totalItems] = await Promise.all([
       this.prisma.pipelineJob.findMany({
         where,
         skip: (page - 1) * pageSize,
@@ -290,17 +283,17 @@ export class PipelineJobsService {
     ]);
 
     return {
-      data,
+      data: jobs as any as PipelineJobResponse[],
       pagination: {
         page,
         pageSize,
         totalItems,
-        totalPages: Math.ceil(totalItems / pageSize),
+        totalPages: Math.ceil(totalItems / pageSize) || 1,
       },
     };
   }
 
-  async findOne(id: string, user: RequestUser) {
+  async findOne(id: string, user: RequestUser): Promise<PipelineJobResponse> {
     const job = await this.prisma.pipelineJob.findFirst({
       where: { id, deletedAt: null },
       include: {
@@ -317,24 +310,16 @@ export class PipelineJobsService {
 
     await this.verifyWorkspaceAccess(job.workspaceId, user.id);
 
-    return job;
+    return job as any as PipelineJobResponse;
   }
 
-  async findRuns(jobId: string, user: RequestUser, query?: PaginationQueryDto): Promise<any[] | PaginatedResult<any>> {
+  async findRuns(jobId: string, user: RequestUser, query?: PaginationQueryDto): Promise<PaginatedResult<PipelineExecutionRunResponse>> {
     const job = await this.findOne(jobId, user);
 
     const where = { pipelineJobId: jobId };
 
-    if (!query?.page && !query?.pageSize) {
-      const runs = await this.prisma.pipelineExecutionRun.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-      });
-      return runs.map((r) => this.serializeRun(r));
-    }
-
-    const page = query.page || 1;
-    const pageSize = query.pageSize || 20;
+    const page = query?.page || 1;
+    const pageSize = query?.pageSize || 20;
 
     const [runs, totalItems] = await Promise.all([
       this.prisma.pipelineExecutionRun.findMany({
@@ -347,12 +332,12 @@ export class PipelineJobsService {
     ]);
 
     return {
-      data: runs.map((r) => this.serializeRun(r)),
+      data: runs.map((r) => this.serializeRun(r)) as any as PipelineExecutionRunResponse[],
       pagination: {
         page,
         pageSize,
         totalItems,
-        totalPages: Math.ceil(totalItems / pageSize),
+        totalPages: Math.ceil(totalItems / pageSize) || 1,
       },
     };
   }

@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, ForbiddenException, BadRequestException 
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestUser } from '../common/auth/auth.guard';
 import { DataProfilesWorker } from './data-profiles.worker';
-import { CreateDataProfileRunDto } from '@edimp/contracts';
+import { CreateDataProfileRunDto, AsyncOperationResponse, DataProfileRunResponse } from '@edimp/contracts';
 
 @Injectable()
 export class DataProfilesService {
@@ -97,7 +97,7 @@ export class DataProfilesService {
     return true;
   }
 
-  async createRun(dto: CreateDataProfileRunDto, user: RequestUser) {
+  async createRun(dto: CreateDataProfileRunDto, user: RequestUser): Promise<AsyncOperationResponse> {
     await this.verifyVersionAccess(dto.dataModelVersionId, user.id);
 
     // Create run in QUEUED state with null startedAt
@@ -113,10 +113,13 @@ export class DataProfilesService {
     // Enqueue async profiling task in background worker
     this.worker.enqueueProfileRun(run.id);
 
-    return run;
+    return {
+      id: run.id,
+      status: 'QUEUED',
+    };
   }
 
-  async getRun(id: string, user: RequestUser) {
+  async getRun(id: string, user: RequestUser): Promise<DataProfileRunResponse> {
     const run = await this.prisma.dataProfileRun.findUnique({
       where: { id },
       include: {

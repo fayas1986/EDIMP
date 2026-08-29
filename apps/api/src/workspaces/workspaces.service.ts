@@ -18,7 +18,7 @@ export class WorkspacesService {
       throw new NotFoundException(`Tenant with ID ${tenantId} not found`);
     }
 
-    if (tenant.members.length === 0) {
+    if ((tenant as any).members.length === 0) {
       throw new ForbiddenException(`You do not have access to Tenant ${tenantId}`);
     }
 
@@ -43,7 +43,7 @@ export class WorkspacesService {
     });
   }
 
-  async findAll(tenantId: string, user: RequestUser, query?: PaginationQueryDto): Promise<Workspace[] | PaginatedResult<Workspace>> {
+  async findAll(tenantId: string, user: RequestUser, query?: PaginationQueryDto): Promise<PaginatedResult<Workspace>> {
     const tenantMember = await this.prisma.tenantMember.findFirst({
       where: { tenantId, userId: user.id },
     });
@@ -60,12 +60,8 @@ export class WorkspacesService {
       },
     };
 
-    if (!query?.page && !query?.pageSize) {
-      return this.prisma.workspace.findMany({ where });
-    }
-
-    const page = query.page || 1;
-    const pageSize = query.pageSize || 20;
+    const page = query?.page || 1;
+    const pageSize = query?.pageSize || 20;
 
     const [data, totalItems] = await Promise.all([
       this.prisma.workspace.findMany({
@@ -82,12 +78,12 @@ export class WorkspacesService {
         page,
         pageSize,
         totalItems,
-        totalPages: Math.ceil(totalItems / pageSize),
+        totalPages: Math.ceil(totalItems / pageSize) || 1,
       },
     };
   }
 
-  async findOne(tenantId: string, id: string, user: RequestUser): Promise<any> {
+  async findOne(tenantId: string, id: string, user: RequestUser): Promise<Workspace> {
     const workspace = await this.prisma.workspace.findFirst({
       where: { id, tenantId, deletedAt: null },
       include: {
@@ -101,17 +97,24 @@ export class WorkspacesService {
       throw new NotFoundException(`Workspace ${id} not found in Tenant ${tenantId}`);
     }
 
-    if (workspace.members.length === 0) {
+    if ((workspace as any).members.length === 0) {
       throw new ForbiddenException(`You do not have access to Workspace ${id}`);
     }
 
-    return workspace;
+    return {
+      id: workspace.id,
+      tenantId: workspace.tenantId,
+      name: workspace.name,
+      createdAt: workspace.createdAt,
+      updatedAt: workspace.updatedAt,
+      deletedAt: workspace.deletedAt,
+    };
   }
 
   async update(tenantId: string, id: string, updateWorkspaceDto: UpdateWorkspaceDto, user: RequestUser): Promise<Workspace> {
     const workspace = await this.findOne(tenantId, id, user);
 
-    const member = workspace.members[0];
+    const member = (workspace as any).members[0];
     if (member.role !== 'OWNER' && member.role !== 'EDITOR') {
       throw new ForbiddenException(`You must be an OWNER or EDITOR to update Workspace ${id}`);
     }
@@ -134,7 +137,7 @@ export class WorkspacesService {
   async remove(tenantId: string, id: string, user: RequestUser): Promise<Workspace> {
     const workspace = await this.findOne(tenantId, id, user);
 
-    const member = workspace.members[0];
+    const member = (workspace as any).members[0];
     if (member.role !== 'OWNER') {
       throw new ForbiddenException(`You must be an OWNER to delete Workspace ${id}`);
     }

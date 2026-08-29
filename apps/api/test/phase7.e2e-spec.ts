@@ -3,6 +3,7 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { cleanDatabase } from './cleanup';
 
 describe('Phase 7: AI Agents & Autonomous Skills Integration (E2E)', () => {
   let app: INestApplication;
@@ -33,69 +34,7 @@ describe('Phase 7: AI Agents & Autonomous Skills Integration (E2E)', () => {
     prisma = app.get(PrismaService);
 
     // CLEANUP DATABASE
-    await prisma.aiQueryMessage.deleteMany();
-    await prisma.aiQuerySession.deleteMany();
-    await prisma.aiAnomalyAnalysis.deleteMany();
-    await prisma.aiDriftRepairSuggestion.deleteMany();
-    await prisma.aiMappingSuggestion.deleteMany();
-    await prisma.aiAgentTask.deleteMany();
-
-    await prisma.errorResolutionLog.deleteMany();
-    await prisma.errorManualOverride.deleteMany();
-    await prisma.recordError.deleteMany();
-    await prisma.reconciliationObservation.deleteMany();
-    await prisma.reconciliationDiscrepancy.deleteMany();
-    await prisma.reconciliationBatch.deleteMany();
-    await prisma.reconciliationRun.deleteMany();
-    await prisma.reconciliationConfigurationVersion.deleteMany();
-    await prisma.reconciliationJob.deleteMany();
-
-    await prisma.migrationRecord.deleteMany();
-    await prisma.jobBatch.deleteMany();
-    await prisma.migrationRun.deleteMany();
-    await prisma.migrationIdentity.deleteMany();
-    await prisma.migrationConfigurationVersion.deleteMany();
-    await prisma.migrationJob.deleteMany();
-
-    await prisma.pipelineExecutionLog.deleteMany();
-    await prisma.pipelineExecutionRun.deleteMany();
-    await prisma.pipelineJob.deleteMany();
-
-    await prisma.fieldValidationRule.deleteMany();
-    await prisma.validationVersion.deleteMany();
-    await prisma.validationSet.deleteMany();
-
-    await prisma.fieldTransformation.deleteMany();
-    await prisma.transformationVersion.deleteMany();
-    await prisma.transformationSet.deleteMany();
-
-    await prisma.fieldMapping.deleteMany();
-    await prisma.entityMapping.deleteMany();
-    await prisma.mappingVersion.deleteMany();
-    await prisma.mappingSet.deleteMany();
-
-    await prisma.canonicalField.deleteMany();
-    await prisma.canonicalEntity.deleteMany();
-    await prisma.canonicalModelVersion.deleteMany();
-    await prisma.canonicalModel.deleteMany();
-
-    await prisma.dataProfileMetric.deleteMany();
-    await prisma.dataProfileRun.deleteMany();
-    await prisma.dataField.deleteMany();
-    await prisma.dataEntity.deleteMany();
-    await prisma.dataModelVersion.deleteMany();
-    await prisma.dataModel.deleteMany();
-
-    await prisma.credentialReference.deleteMany();
-    await prisma.connection.deleteMany();
-    await prisma.connectorType.deleteMany();
-
-    await prisma.environment.deleteMany();
-    await prisma.workspaceMember.deleteMany();
-    await prisma.workspace.deleteMany();
-    await prisma.tenantMember.deleteMany();
-    await prisma.tenant.deleteMany();
-    await prisma.user.deleteMany();
+    await cleanDatabase(prisma);
 
     // SEED BASE TEST DATA
     const user = await prisma.user.create({
@@ -112,6 +51,13 @@ describe('Phase 7: AI Agents & Autonomous Skills Integration (E2E)', () => {
       data: { tenantId, name: 'Phase 7 Workspace' },
     });
     workspaceId = workspace.id;
+
+    await prisma.tenantMember.create({
+      data: { tenantId, userId, role: 'ADMIN' },
+    });
+    await prisma.workspaceMember.create({
+      data: { workspaceId, userId, role: 'OWNER' },
+    });
 
     const otherWorkspace = await prisma.workspace.create({
       data: { tenantId, name: 'Other Isolated Workspace' },
@@ -175,19 +121,23 @@ describe('Phase 7: AI Agents & Autonomous Skills Integration (E2E)', () => {
     it('Scenario 1: Triggers mapping suggestion task with score breakdowns & provenance', async () => {
       const res = await request(app.getHttpServer())
         .post(`/api/v1/workspaces/${workspaceId}/ai/mapping-suggestions`)
+        .set('x-user-id', userId)
         .send({
           environmentId,
           sourceDataModelVersionId: dataModelVersionId,
           canonicalModelVersionId,
           confidenceThreshold: 0.70,
         })
-        .expect(201);
+        .expect(202);
 
       expect(res.body.id).toBeDefined();
       expect(res.body.status).toBe('PENDING');
-      expect(res.body.agentType).toBe('MAPPING_SUGGESTION');
-      expect(res.body.inputHash).toBeDefined();
       taskId = res.body.id;
+
+      const dbTask = await prisma.aiAgentTask.findUnique({ where: { id: taskId } });
+      expect(dbTask).toBeDefined();
+      expect(dbTask?.agentType).toBe('MAPPING_SUGGESTION');
+      expect(dbTask?.inputHash).toBeDefined();
 
       // Poll up to 2500ms for async worker execution
       let taskDetails = await prisma.aiAgentTask.findUnique({
@@ -211,6 +161,7 @@ describe('Phase 7: AI Agents & Autonomous Skills Integration (E2E)', () => {
       expect(match?.finalConfidenceScore).toBeGreaterThanOrEqual(0.70);
       expect(match?.nameScore).toBeDefined();
       expect(match?.semanticScore).toBeDefined();
+      expect(match?.semanticScore).toBeDefined();
       expect(match?.agentVersion).toBe('mapping-agent-v1.0');
       expect(match?.algorithmVersion).toBe('hybrid-semantic-v1.0');
       suggestionId = match!.id;
@@ -225,13 +176,14 @@ describe('Phase 7: AI Agents & Autonomous Skills Integration (E2E)', () => {
     it('Scenario 2: Task Idempotency — Reuses existing task result for identical inputHash', async () => {
       const res = await request(app.getHttpServer())
         .post(`/api/v1/workspaces/${workspaceId}/ai/mapping-suggestions`)
+        .set('x-user-id', userId)
         .send({
           environmentId,
           sourceDataModelVersionId: dataModelVersionId,
           canonicalModelVersionId,
           confidenceThreshold: 0.70,
         })
-        .expect(201);
+        .expect(202);
 
       expect(res.body.id).toBe(taskId); // Reused task ID
     });
@@ -308,18 +260,23 @@ describe('Phase 7: AI Agents & Autonomous Skills Integration (E2E)', () => {
     it('Scenario 6: Detects smart rename candidates, added/removed fields, and severity', async () => {
       const res = await request(app.getHttpServer())
         .post(`/api/v1/workspaces/${workspaceId}/ai/schema-drift`)
+        .set('x-user-id', userId)
         .send({
           environmentId,
           baselineModelVersionId: dataModelVersionId,
           targetModelVersionId: dataModelVersionId,
         })
-        .expect(201);
+        .expect(202);
 
       expect(res.body.id).toBeDefined();
       expect(res.body.status).toBe('COMPLETED');
-      expect(res.body.driftSuggestions.length).toBeGreaterThan(0);
 
-      const rename = res.body.driftSuggestions.find((d: any) => d.category === 'RENAME_CANDIDATE');
+      const driftSuggestions = await prisma.aiDriftRepairSuggestion.findMany({
+        where: { taskId: res.body.id },
+      });
+      expect(driftSuggestions.length).toBeGreaterThan(0);
+
+      const rename = driftSuggestions.find((d: any) => d.category === 'RENAME_CANDIDATE');
       expect(rename).toBeDefined();
       expect(rename.fieldName).toBe('customer_code');
       expect(rename.renamedToFieldName).toBe('customer_number');
@@ -332,27 +289,37 @@ describe('Phase 7: AI Agents & Autonomous Skills Integration (E2E)', () => {
     it('Scenario 7: Enforces sufficient baseline data threshold (< 5 samples returns INSUFFICIENT_BASELINE)', async () => {
       const res = await request(app.getHttpServer())
         .post(`/api/v1/workspaces/${workspaceId}/ai/anomaly-analysis`)
+        .set('x-user-id', userId)
         .send({
           environmentId,
           numericValues: [100.0, 102.5], // Only 2 samples (< 5)
         })
-        .expect(201);
+        .expect(202);
 
-      expect(res.body.anomalyAnalyses[0].anomalyType).toBe('INSUFFICIENT_BASELINE');
-      expect(res.body.anomalyAnalyses[0].confidenceScore).toBeLessThan(0.20);
-      expect(res.body.anomalyAnalyses[0].sampleSize).toBe(2);
+      const anomalyAnalyses = await prisma.aiAnomalyAnalysis.findMany({
+        where: { taskId: res.body.id },
+      });
+      expect(anomalyAnalyses.length).toBeGreaterThan(0);
+      expect(anomalyAnalyses[0].anomalyType).toBe('INSUFFICIENT_BASELINE');
+      expect(anomalyAnalyses[0].confidenceScore).toBeLessThan(0.20);
+      expect(anomalyAnalyses[0].sampleSize).toBe(2);
     });
 
     it('Scenario 8: Identifies numerical outlier with Z-score & IQR evidence (sample size >= 5)', async () => {
       const res = await request(app.getHttpServer())
         .post(`/api/v1/workspaces/${workspaceId}/ai/anomaly-analysis`)
+        .set('x-user-id', userId)
         .send({
           environmentId,
           numericValues: [100.5, 102.0, 99.8, 101.2, 5500.0, 100.1], // Outlier 5500
         })
-        .expect(201);
+        .expect(202);
 
-      const anomaly = res.body.anomalyAnalyses[0];
+      const anomalyAnalyses = await prisma.aiAnomalyAnalysis.findMany({
+        where: { taskId: res.body.id },
+      });
+      expect(anomalyAnalyses.length).toBeGreaterThan(0);
+      const anomaly = anomalyAnalyses[0];
       expect(anomaly.anomalyType).toBe('NUMERIC_OUTLIER');
       expect(anomaly.zScoreValue).toBeGreaterThan(2.0);
       expect(anomaly.meanValue).toBeDefined();
@@ -388,12 +355,13 @@ describe('Phase 7: AI Agents & Autonomous Skills Integration (E2E)', () => {
 
       const res = await request(app.getHttpServer())
         .post(`/api/v1/workspaces/${workspaceId}/ai/anomaly-analysis`)
+        .set('x-user-id', userId)
         .send({
           environmentId,
           reconciliationDiscrepancyId: discrepancy.id,
           numericValues: [10.0, 12.0, 11.0, 10.5, 95.0],
         })
-        .expect(201);
+        .expect(202);
 
       // Verify discrepancy remains in OPEN status (AI does NOT auto-resolve)
       const discAfter = await prisma.reconciliationDiscrepancy.findUnique({
@@ -453,22 +421,24 @@ describe('Phase 7: AI Agents & Autonomous Skills Integration (E2E)', () => {
     it('Scenario 13: Lists all workspace AI agent tasks with provenance details', async () => {
       const res = await request(app.getHttpServer())
         .get(`/api/v1/workspaces/${workspaceId}/ai/tasks`)
+        .set('x-user-id', userId)
         .expect(200);
 
-      expect(Array.isArray(res.body)).toBe(true);
-      expect(res.body.length).toBeGreaterThan(0);
-      expect(res.body[0].workspaceId).toBe(workspaceId);
+      expect(Array.isArray(res.body.data)).toBe(true);
+      expect(res.body.data.length).toBeGreaterThan(0);
+      expect(res.body.data[0].workspaceId).toBe(workspaceId);
     });
 
     it('Scenario 14: Verifies offline DeterministicProvider executes 100% without external API key dependencies', async () => {
       const res = await request(app.getHttpServer())
         .post(`/api/v1/workspaces/${workspaceId}/ai/mapping-suggestions`)
+        .set('x-user-id', userId)
         .send({
           environmentId,
           sourceFields: [{ name: 'phone_no', type: 'VARCHAR' }],
           targetFields: [{ name: 'phoneNumber', type: 'VARCHAR' }],
         })
-        .expect(201);
+        .expect(202);
 
       expect(res.body.id).toBeDefined();
     });
@@ -476,6 +446,7 @@ describe('Phase 7: AI Agents & Autonomous Skills Integration (E2E)', () => {
     it('Scenario 15: Cross-Workspace Hierarchy Boundary check on AI Agent task invocation', async () => {
       await request(app.getHttpServer())
         .post(`/api/v1/workspaces/${otherWorkspaceId}/ai/mapping-suggestions`)
+        .set('x-user-id', userId)
         .send({
           environmentId, // Belongs to workspaceId, not otherWorkspaceId
         })

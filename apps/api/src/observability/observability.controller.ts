@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiHeader } from '@nestjs/swagger';
 import { ObservabilityService } from './observability.service';
-import { AuditLogQueryDto } from '@edimp/contracts';
+import { AuditLogQueryDto, AuditLogResponse, PaginatedResult } from '@edimp/contracts';
 import { MetricsGuard } from './metrics.guard';
 
 @ApiTags('Observability, Metrics & Audit')
@@ -36,7 +36,7 @@ export class ObservabilityController {
   async listAuditLogs(
     @Param('workspaceId') workspaceId: string,
     @Query() query: AuditLogQueryDto,
-  ) {
+  ): Promise<PaginatedResult<AuditLogResponse>> {
     return this.observabilityService.listAuditLogs(workspaceId, query);
   }
 }

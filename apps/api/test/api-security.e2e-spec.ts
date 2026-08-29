@@ -3,6 +3,7 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { cleanDatabase } from './cleanup';
 
 describe('API Architecture & Security Hardening (E2E)', () => {
   let app: INestApplication;
@@ -19,6 +20,8 @@ describe('API Architecture & Security Hardening (E2E)', () => {
   let connectionA_Id: string;
   let dataModelA_Id: string;
   let migrationRunA_Id: string;
+  let jobA_Id: string;
+  let aiSuggestionA_Id: string;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -32,48 +35,7 @@ describe('API Architecture & Security Hardening (E2E)', () => {
     prisma = app.get(PrismaService);
 
     // CLEANUP
-    await prisma.auditLog.deleteMany();
-    await prisma.workerNode.deleteMany();
-    await prisma.aiMappingSuggestion.deleteMany();
-    await prisma.aiDriftRepairSuggestion.deleteMany();
-    await prisma.aiAnomalyAnalysis.deleteMany();
-    await prisma.aiQueryMessage.deleteMany();
-    await prisma.aiQuerySession.deleteMany();
-    await prisma.reconciliationRun.deleteMany();
-    await prisma.recordError.deleteMany();
-    await prisma.migrationRecord.deleteMany();
-    await prisma.jobBatch.deleteMany();
-    await prisma.migrationRun.deleteMany();
-    await prisma.migrationConfigurationVersion.deleteMany();
-    await prisma.migrationJob.deleteMany();
-    await prisma.fieldValidationRule.deleteMany();
-    await prisma.validationVersion.deleteMany();
-    await prisma.validationSet.deleteMany();
-    await prisma.fieldTransformation.deleteMany();
-    await prisma.transformationVersion.deleteMany();
-    await prisma.transformationSet.deleteMany();
-    await prisma.fieldMapping.deleteMany();
-    await prisma.entityMapping.deleteMany();
-    await prisma.mappingVersion.deleteMany();
-    await prisma.mappingSet.deleteMany();
-    await prisma.canonicalField.deleteMany();
-    await prisma.canonicalEntity.deleteMany();
-    await prisma.canonicalModelVersion.deleteMany();
-    await prisma.canonicalModel.deleteMany();
-    await prisma.dataProfileMetric.deleteMany();
-    await prisma.dataProfileRun.deleteMany();
-    await prisma.dataField.deleteMany();
-    await prisma.dataEntity.deleteMany();
-    await prisma.dataModelVersion.deleteMany();
-    await prisma.dataModel.deleteMany();
-    await prisma.connection.deleteMany();
-    await prisma.connectorType.deleteMany();
-    await prisma.environment.deleteMany();
-    await prisma.workspaceMember.deleteMany();
-    await prisma.workspace.deleteMany();
-    await prisma.tenantMember.deleteMany();
-    await prisma.tenant.deleteMany();
-    await prisma.user.deleteMany();
+    await cleanDatabase(prisma);
 
     // SEED TENANT A & USER A
     const userA = await prisma.user.create({
@@ -174,6 +136,7 @@ describe('API Architecture & Security Hardening (E2E)', () => {
     const jobA = await prisma.migrationJob.create({
       data: { workspaceId: workspaceA_Id, environmentId: envA.id, name: 'Job A' },
     });
+    jobA_Id = jobA.id;
     const configA = await prisma.migrationConfigurationVersion.create({
       data: {
         migrationJobId: jobA.id,
@@ -193,6 +156,33 @@ describe('API Architecture & Security Hardening (E2E)', () => {
       data: { migrationConfigurationVersionId: configA.id, status: 'COMPLETED' },
     });
     migrationRunA_Id = runA.id;
+
+    const agentTask = await prisma.aiAgentTask.create({
+      data: {
+        workspaceId: workspaceA_Id,
+        environmentId: envA.id,
+        agentType: 'MAPPING_SUGGESTION',
+        inputHash: 'some-dummy-hash',
+        taskParameters: {},
+      },
+    });
+
+    const suggestionA = await prisma.aiMappingSuggestion.create({
+      data: {
+        taskId: agentTask.id,
+        workspaceId: workspaceA_Id,
+        sourceEntity: 'SourceTable',
+        sourceField: 'SourceField',
+        targetEntity: 'TargetTable',
+        targetField: 'SomeField',
+        status: 'PROPOSED',
+        finalConfidenceScore: 0.95,
+        reasoning: 'AI matched based on semantics',
+        agentVersion: 'v1.0.0',
+        algorithmVersion: 'v1',
+      },
+    });
+    aiSuggestionA_Id = suggestionA.id;
   });
 
   afterAll(async () => {
@@ -219,6 +209,39 @@ describe('API Architecture & Security Hardening (E2E)', () => {
         .get(`/api/v1/migration-runs/${migrationRunA_Id}`)
         .set('x-user-id', userB_Id)
         .expect(403);
+    });
+
+    it('POST /api/v1/migration-runs/:id/retry — Returns 403 when User B tries to retry MigrationRun A', async () => {
+      await request(app.getHttpServer())
+        .post(`/api/v1/migration-runs/${migrationRunA_Id}/retry`)
+        .set('x-user-id', userB_Id)
+        .send({ mode: 'TRANSIENT_ONLY' })
+        .expect(403);
+    });
+
+    it('POST /api/v1/migration-runs/:id/resume — Returns 403 when User B tries to resume MigrationRun A', async () => {
+      await request(app.getHttpServer())
+        .post(`/api/v1/migration-runs/${migrationRunA_Id}/resume`)
+        .set('x-user-id', userB_Id)
+        .send({ batchSize: 100 })
+        .expect(403);
+    });
+
+    it('POST /api/v1/migration-jobs/:id/execute — Returns 403 when User B tries to execute MigrationJob A', async () => {
+      await request(app.getHttpServer())
+        .post(`/api/v1/migration-jobs/${jobA_Id}/execute`)
+        .set('x-user-id', userB_Id)
+        .send({ batchSize: 1000 })
+        .expect(403);
+    });
+
+    it('POST /api/v1/ai-suggestions/:id/accept — Returns 404 when User B tries to accept AI suggestion A in Workspace B', async () => {
+      await request(app.getHttpServer())
+        .post(`/api/v1/ai-suggestions/${aiSuggestionA_Id}/accept`)
+        .set('x-user-id', userB_Id)
+        .set('x-workspace-id', workspaceB_Id)
+        .send({ targetFieldMapping: {} })
+        .expect(404);
     });
 
     it('GET /api/v1/connections/:id — Returns 200 when User A accesses Connection A', async () => {
@@ -267,16 +290,18 @@ describe('API Architecture & Security Hardening (E2E)', () => {
     });
 
     it('Metrics Authentication: Correct token -> 200', async () => {
+      const token = process.env.METRICS_AUTH_TOKEN || 'edimp_metrics_secret_token';
       await request(app.getHttpServer())
         .get('/api/v1/metrics')
-        .set('x-metrics-token', 'edimp_metrics_secret_token')
+        .set('x-metrics-token', token)
         .expect(200);
     });
 
     it('Automated Cardinality Test: Fails if high-cardinality labels are present in Prometheus metrics', async () => {
+      const token = process.env.METRICS_AUTH_TOKEN || 'edimp_metrics_secret_token';
       const res = await request(app.getHttpServer())
         .get('/api/v1/metrics')
-        .set('x-metrics-token', 'edimp_metrics_secret_token')
+        .set('x-metrics-token', token)
         .expect(200);
 
       const metricsText = res.text;

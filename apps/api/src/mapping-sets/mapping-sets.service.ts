@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestUser } from '../common/auth/auth.guard';
-import { CreateMappingSetDto, UpdateMappingDraftDto, PaginationQueryDto, PaginatedResult } from '@edimp/contracts';
+import { CreateMappingSetDto, UpdateMappingDraftDto, PaginationQueryDto, PaginatedResult, MappingSetResponse, MappingVersionResponse } from '@edimp/contracts';
 import { MappingValidatorService } from './mapping-validator.service';
 import { Prisma } from '@prisma/client';
 import * as crypto from 'crypto';
@@ -66,7 +66,7 @@ export class MappingSetsService {
     return crypto.createHash('sha256').update(JSON.stringify(canonicalized)).digest('hex');
   }
 
-  async create(workspaceId: string, dto: CreateMappingSetDto, user: RequestUser) {
+  async create(workspaceId: string, dto: CreateMappingSetDto, user: RequestUser): Promise<MappingSetResponse> {
     await this.verifyWorkspaceAccess(workspaceId, user.id);
 
     const existing = await this.prisma.mappingSet.findFirst({
@@ -97,7 +97,7 @@ export class MappingSetsService {
     }
 
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const result = await this.prisma.$transaction(async (tx) => {
         const mappingSet = await tx.mappingSet.create({
           data: {
             workspaceId,
@@ -107,7 +107,7 @@ export class MappingSetsService {
           },
         });
 
-        const version = await tx.mappingVersion.create({
+        const mappingVersion = await tx.mappingVersion.create({
           data: {
             mappingSetId: mappingSet.id,
             canonicalModelVersionId: dto.canonicalModelVersionId,
@@ -117,27 +117,29 @@ export class MappingSetsService {
           },
         });
 
-        for (const em of dto.entityMappings || []) {
-          const createdEm = await tx.entityMapping.create({
-            data: {
-              mappingVersionId: version.id,
-              sourceEntityId: em.sourceEntityId,
-              canonicalEntityId: em.canonicalEntityId,
-              targetEntityId: em.targetEntityId,
-            },
-          });
-
-          if (em.fieldMappings && em.fieldMappings.length > 0) {
-            await tx.fieldMapping.createMany({
-              data: em.fieldMappings.map(fm => ({
-                entityMappingId: createdEm.id,
-                sourceFieldId: fm.sourceFieldId,
-                canonicalFieldId: fm.canonicalFieldId,
-                targetFieldId: fm.targetFieldId,
-                transformType: fm.transformType || 'DIRECT',
-                config: fm.config || {},
-              })),
+        if (dto.entityMappings && dto.entityMappings.length > 0) {
+          for (const em of dto.entityMappings) {
+            const createdEm = await tx.entityMapping.create({
+              data: {
+                mappingVersionId: mappingVersion.id,
+                sourceEntityId: em.sourceEntityId,
+                canonicalEntityId: em.canonicalEntityId,
+                targetEntityId: em.targetEntityId,
+              },
             });
+
+            if (em.fieldMappings && em.fieldMappings.length > 0) {
+              await tx.fieldMapping.createMany({
+                data: em.fieldMappings.map((fm: any) => ({
+                  entityMappingId: createdEm.id,
+                  sourceFieldId: fm.sourceFieldId,
+                  canonicalFieldId: fm.canonicalFieldId,
+                  targetFieldId: fm.targetFieldId,
+                  transformType: fm.transformType || 'DIRECT',
+                  config: fm.config || {},
+                })),
+              });
+            }
           }
         }
 
@@ -154,6 +156,12 @@ export class MappingSetsService {
           },
         });
       });
+
+      if (!result) {
+        throw new NotFoundException('MappingSet not found after creation');
+      }
+
+      return result as any as MappingSetResponse;
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
         throw new BadRequestException('Invalid entity or field reference: referenced entity/field does not exist');
@@ -162,25 +170,13 @@ export class MappingSetsService {
     }
   }
 
-  async findAll(workspaceId: string, user: RequestUser, query?: PaginationQueryDto): Promise<any[] | PaginatedResult<any>> {
+  async findAll(workspaceId: string, user: RequestUser, query?: PaginationQueryDto): Promise<PaginatedResult<MappingSetResponse>> {
     await this.verifyWorkspaceAccess(workspaceId, user.id);
 
     const where = { workspaceId, deletedAt: null };
 
-    if (!query?.page && !query?.pageSize) {
-      return this.prisma.mappingSet.findMany({
-        where,
-        include: {
-          versions: {
-            orderBy: { version: 'desc' },
-            take: 1,
-          },
-        },
-      });
-    }
-
-    const page = query.page || 1;
-    const pageSize = query.pageSize || 20;
+    const page = query?.page || 1;
+    const pageSize = query?.pageSize || 20;
 
     const [data, totalItems] = await Promise.all([
       this.prisma.mappingSet.findMany({
@@ -191,6 +187,11 @@ export class MappingSetsService {
           versions: {
             orderBy: { version: 'desc' },
             take: 1,
+            include: {
+              entityMappings: {
+                include: { fieldMappings: true },
+              },
+            },
           },
         },
       }),
@@ -198,17 +199,17 @@ export class MappingSetsService {
     ]);
 
     return {
-      data,
+      data: data as any as MappingSetResponse[],
       pagination: {
         page,
         pageSize,
         totalItems,
-        totalPages: Math.ceil(totalItems / pageSize),
+        totalPages: Math.ceil(totalItems / pageSize) || 1,
       },
     };
   }
 
-  async findOne(id: string, user: RequestUser) {
+  async findOne(id: string, user: RequestUser): Promise<MappingSetResponse> {
     const set = await this.prisma.mappingSet.findFirst({
       where: { id, deletedAt: null },
       include: {
@@ -228,19 +229,19 @@ export class MappingSetsService {
     }
 
     await this.verifyWorkspaceAccess(set.workspaceId, user.id);
-    return set;
+    return set as any as MappingSetResponse;
   }
 
-  async updateDraft(id: string, dto: UpdateMappingDraftDto, user: RequestUser) {
+  async updateDraft(id: string, dto: UpdateMappingDraftDto, user: RequestUser): Promise<MappingSetResponse> {
     const set = await this.findOne(id, user);
 
-    const latestVersion = set.versions[0];
+    const latestVersion = (set as any).versions[0];
     if (!latestVersion || latestVersion.status !== 'DRAFT') {
       throw new BadRequestException(`Cannot update MappingSet ${id}: no DRAFT version exists. Published/Superseded versions are immutable.`);
     }
 
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const result = await this.prisma.$transaction(async (tx) => {
         if (dto.name) {
           await tx.mappingSet.update({
             where: { id },
@@ -252,19 +253,18 @@ export class MappingSetsService {
           // Delete old draft mappings
           const oldEms = await tx.entityMapping.findMany({
             where: { mappingVersionId: latestVersion.id },
-            select: { id: true },
           });
-          const oldEmIds = oldEms.map(e => e.id);
+          const oldEmIds = oldEms.map(em => em.id);
 
-          if (oldEmIds.length > 0) {
-            await tx.fieldMapping.deleteMany({
-              where: { entityMappingId: { in: oldEmIds } },
-            });
-            await tx.entityMapping.deleteMany({
-              where: { mappingVersionId: latestVersion.id },
-            });
-          }
+          await tx.fieldMapping.deleteMany({
+            where: { entityMappingId: { in: oldEmIds } },
+          });
 
+          await tx.entityMapping.deleteMany({
+            where: { mappingVersionId: latestVersion.id },
+          });
+
+          // Insert new draft mappings
           for (const em of dto.entityMappings) {
             const createdEm = await tx.entityMapping.create({
               data: {
@@ -277,7 +277,7 @@ export class MappingSetsService {
 
             if (em.fieldMappings && em.fieldMappings.length > 0) {
               await tx.fieldMapping.createMany({
-                data: em.fieldMappings.map(fm => ({
+                data: em.fieldMappings.map((fm: any) => ({
                   entityMappingId: createdEm.id,
                   sourceFieldId: fm.sourceFieldId,
                   canonicalFieldId: fm.canonicalFieldId,
@@ -304,6 +304,12 @@ export class MappingSetsService {
           },
         });
       });
+
+      if (!result) {
+        throw new NotFoundException('MappingSet not found after update');
+      }
+
+      return result as any as MappingSetResponse;
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
         throw new BadRequestException('Invalid entity or field reference: referenced entity/field does not exist');
@@ -313,10 +319,10 @@ export class MappingSetsService {
   }
 
   // Requirement 8: Pessimistic locking publish transaction with SELECT FOR UPDATE + MappingValidator
-  async publishVersion(mappingSetId: string, versionId: string, user: RequestUser) {
+  async publishVersion(mappingSetId: string, versionId: string, user: RequestUser): Promise<MappingVersionResponse> {
     const set = await this.findOne(mappingSetId, user);
 
-    const targetVersion = set.versions.find(v => v.id === versionId);
+    const targetVersion = (set as any).versions.find((v: any) => v.id === versionId);
     if (!targetVersion) {
       throw new NotFoundException(`MappingVersion ${versionId} not found`);
     }
@@ -330,7 +336,7 @@ export class MappingSetsService {
 
     const definitionHash = this.computeDefinitionHash(targetVersion.entityMappings || []);
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       // 1. Pessimistic Row Lock on MappingSet (SELECT FOR UPDATE)
       await tx.$executeRawUnsafe(
         `SELECT id FROM "MappingSet" WHERE id = $1 FOR UPDATE`,
@@ -366,5 +372,7 @@ export class MappingSetsService {
 
       return published;
     });
+
+    return result as any as MappingVersionResponse;
   }
 }

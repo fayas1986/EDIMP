@@ -21,6 +21,10 @@ import {
   ResumeMigrationRunDto,
   PaginationQueryDto,
   PaginatedResult,
+  MigrationJobResponse,
+  MigrationConfigurationVersionResponse,
+  MigrationRunResponse,
+  AsyncOperationResponse,
   TransformationContext,
 } from '@edimp/contracts';
 import {
@@ -61,7 +65,7 @@ export class MigrationEngineService {
   /**
    * 1. Create MigrationJob
    */
-  async createJob(workspaceId: string, dto: CreateMigrationJobDto, user: RequestUser): Promise<any> {
+  async createJob(workspaceId: string, dto: CreateMigrationJobDto, user: RequestUser): Promise<MigrationJobResponse> {
     await this.checkWorkspaceAccess(workspaceId, user);
     await this.migrationValidationService.validateJobCreation(workspaceId, dto.environmentId);
 
@@ -72,7 +76,7 @@ export class MigrationEngineService {
       throw new BadRequestException(`MigrationJob with name '${dto.name}' already exists in workspace`);
     }
 
-    return this.prisma.migrationJob.create({
+    const job = await this.prisma.migrationJob.create({
       data: {
         workspaceId,
         environmentId: dto.environmentId,
@@ -80,6 +84,8 @@ export class MigrationEngineService {
         description: dto.description,
       },
     });
+
+    return job as any as MigrationJobResponse;
   }
 
   /**
@@ -89,45 +95,39 @@ export class MigrationEngineService {
     workspaceId: string,
     user: RequestUser,
     query?: PaginationQueryDto,
-  ): Promise<any> {
+  ): Promise<PaginatedResult<MigrationJobResponse>> {
     await this.checkWorkspaceAccess(workspaceId, user);
 
-    if (query?.page && query?.pageSize) {
-      const page = Number(query.page);
-      const pageSize = Number(query.pageSize);
-      const skip = (page - 1) * pageSize;
+    const page = query?.page || 1;
+    const pageSize = query?.pageSize || 20;
+    const skip = (page - 1) * pageSize;
 
-      const [items, totalItems] = await Promise.all([
-        this.prisma.migrationJob.findMany({
-          where: { workspaceId, deletedAt: null },
-          include: { configurations: true },
-          orderBy: { createdAt: 'desc' },
-          skip,
-          take: pageSize,
-        }),
-        this.prisma.migrationJob.count({ where: { workspaceId, deletedAt: null } }),
-      ]);
+    const [items, totalItems] = await Promise.all([
+      this.prisma.migrationJob.findMany({
+        where: { workspaceId, deletedAt: null },
+        include: { configurations: true },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: pageSize,
+      }),
+      this.prisma.migrationJob.count({ where: { workspaceId, deletedAt: null } }),
+    ]);
 
-      return {
-        items,
-        totalItems,
+    return {
+      data: items as any as MigrationJobResponse[],
+      pagination: {
         page,
         pageSize,
-        totalPages: Math.ceil(totalItems / pageSize),
-      };
-    }
-
-    return this.prisma.migrationJob.findMany({
-      where: { workspaceId, deletedAt: null },
-      include: { configurations: true },
-      orderBy: { createdAt: 'desc' },
-    });
+        totalItems,
+        totalPages: Math.ceil(totalItems / pageSize) || 1,
+      },
+    };
   }
 
   /**
    * 3. Get MigrationJob by ID
    */
-  async findOneJob(id: string, user: RequestUser): Promise<any> {
+  async findOneJob(id: string, user: RequestUser): Promise<MigrationJobResponse> {
     const job = await this.prisma.migrationJob.findUnique({
       where: { id },
       include: { configurations: true },
@@ -136,7 +136,7 @@ export class MigrationEngineService {
       throw new NotFoundException(`MigrationJob with ID ${id} not found`);
     }
     await this.checkWorkspaceAccess(job.workspaceId, user);
-    return job;
+    return job as any as MigrationJobResponse;
   }
 
   /**
@@ -146,7 +146,7 @@ export class MigrationEngineService {
     jobId: string,
     dto: CreateMigrationConfigVersionDto,
     user: RequestUser,
-  ): Promise<any> {
+  ): Promise<MigrationConfigurationVersionResponse> {
     const job = await this.findOneJob(jobId, user);
 
     await this.migrationValidationService.validateConfigurationReferences(
@@ -161,7 +161,7 @@ export class MigrationEngineService {
     });
     const nextVersion = latestVer ? latestVer.version + 1 : 1;
 
-    return this.prisma.migrationConfigurationVersion.create({
+    const result = await this.prisma.migrationConfigurationVersion.create({
       data: {
         migrationJobId: jobId,
         version: nextVersion,
@@ -175,12 +175,14 @@ export class MigrationEngineService {
         validationVersionId: dto.validationVersionId,
       },
     });
+
+    return result as any as MigrationConfigurationVersionResponse;
   }
 
   /**
    * 5. Transactional Pessimistic Configuration Publication
    */
-  async publishConfigVersion(configId: string, user: RequestUser): Promise<any> {
+  async publishConfigVersion(configId: string, user: RequestUser): Promise<MigrationConfigurationVersionResponse> {
     const config = await this.prisma.migrationConfigurationVersion.findUnique({
       where: { id: configId },
       include: { migrationJob: true },
@@ -194,7 +196,7 @@ export class MigrationEngineService {
       throw new BadRequestException(`Configuration version ${config.version} is already PUBLISHED`);
     }
 
-    return this.prisma.$transaction(async (tx: any) => {
+    const result = await this.prisma.$transaction(async (tx: any) => {
       await tx.$executeRawUnsafe(
         'SELECT id FROM "MigrationJob" WHERE id = $1 FOR UPDATE',
         config.migrationJobId,
@@ -225,12 +227,14 @@ export class MigrationEngineService {
         },
       });
     });
+
+    return result as any as MigrationConfigurationVersionResponse;
   }
 
   /**
    * 6. Trigger Production MigrationRun
    */
-  async triggerRun(jobId: string, dto: TriggerMigrationRunDto, user: RequestUser): Promise<any> {
+  async triggerRun(jobId: string, dto: TriggerMigrationRunDto, user: RequestUser): Promise<AsyncOperationResponse> {
     const job = await this.findOneJob(jobId, user);
 
     const publishedConfig = await this.prisma.migrationConfigurationVersion.findFirst({
@@ -270,7 +274,10 @@ export class MigrationEngineService {
       });
     }
 
-    return this.serializeRun(run);
+    return {
+      id: run.id,
+      status: 'QUEUED',
+    };
   }
 
   /**
@@ -659,7 +666,7 @@ export class MigrationEngineService {
     jobId: string,
     user: RequestUser,
     query?: PaginationQueryDto,
-  ): Promise<any> {
+  ): Promise<PaginatedResult<MigrationRunResponse>> {
     await this.findOneJob(jobId, user);
 
     const configs = await this.prisma.migrationConfigurationVersion.findMany({
@@ -668,44 +675,37 @@ export class MigrationEngineService {
     });
     const configIds = configs.map((c: any) => c.id);
 
-    if (query?.page && query?.pageSize) {
-      const page = Number(query.page);
-      const pageSize = Number(query.pageSize);
-      const skip = (page - 1) * pageSize;
+    const page = query?.page || 1;
+    const pageSize = query?.pageSize || 20;
+    const skip = (page - 1) * pageSize;
 
-      const [items, totalItems] = await Promise.all([
-        this.prisma.migrationRun.findMany({
-          where: { migrationConfigurationVersionId: { in: configIds } },
-          orderBy: { createdAt: 'desc' },
-          skip,
-          take: pageSize,
-        }),
-        this.prisma.migrationRun.count({
-          where: { migrationConfigurationVersionId: { in: configIds } },
-        }),
-      ]);
+    const [items, totalItems] = await Promise.all([
+      this.prisma.migrationRun.findMany({
+        where: { migrationConfigurationVersionId: { in: configIds } },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: pageSize,
+      }),
+      this.prisma.migrationRun.count({
+        where: { migrationConfigurationVersionId: { in: configIds } },
+      }),
+    ]);
 
-      return {
-        items: items.map((r: any) => this.serializeRun(r)),
-        totalItems,
+    return {
+      data: items.map((r: any) => this.serializeRun(r)) as any as MigrationRunResponse[],
+      pagination: {
         page,
         pageSize,
-        totalPages: Math.ceil(totalItems / pageSize),
-      };
-    }
-
-    const runs = await this.prisma.migrationRun.findMany({
-      where: { migrationConfigurationVersionId: { in: configIds } },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    return runs.map((r: any) => this.serializeRun(r));
+        totalItems,
+        totalPages: Math.ceil(totalItems / pageSize) || 1,
+      },
+    };
   }
 
   /**
    * 9. Get MigrationRun details by ID
    */
-  async findOneRun(runId: string, user: RequestUser): Promise<any> {
+  async findOneRun(runId: string, user: RequestUser): Promise<MigrationRunResponse> {
     const run = await this.prisma.migrationRun.findUnique({
       where: { id: runId },
       include: {
@@ -718,13 +718,13 @@ export class MigrationEngineService {
       throw new NotFoundException(`MigrationRun with ID ${runId} not found`);
     }
     await this.checkWorkspaceAccess(run.migrationConfigVersion.migrationJob.workspaceId, user);
-    return this.serializeRun(run);
+    return this.serializeRun(run) as any as MigrationRunResponse;
   }
 
   /**
    * 10. Retry Failed Records in MigrationRun
    */
-  async retryRun(runId: string, dto: RetryMigrationRunDto, user: RequestUser): Promise<any> {
+  async retryRun(runId: string, dto: RetryMigrationRunDto, user: RequestUser): Promise<AsyncOperationResponse> {
     const run = await this.findOneRun(runId, user);
 
     const failedRecords = await this.prisma.migrationRecord.findMany({
@@ -750,16 +750,20 @@ export class MigrationEngineService {
       where: { id: runId },
       data: {
         recordsRetried: BigInt(retriedCount),
+        status: MigrationRunStatus.QUEUED,
       },
     });
 
-    return this.serializeRun(updated);
+    return {
+      id: updated.id,
+      status: 'QUEUED',
+    };
   }
 
   /**
    * 11. Resume Interrupted MigrationRun
    */
-  async resumeRun(runId: string, dto: ResumeMigrationRunDto, user: RequestUser): Promise<any> {
+  async resumeRun(runId: string, dto: ResumeMigrationRunDto, user: RequestUser): Promise<AsyncOperationResponse> {
     const run = await this.findOneRun(runId, user);
 
     await this.prisma.jobBatch.updateMany({
@@ -786,7 +790,10 @@ export class MigrationEngineService {
       });
     });
 
-    return this.serializeRun(resumedRun);
+    return {
+      id: resumedRun.id,
+      status: 'EXTRACTING',
+    };
   }
 
   /**

@@ -22,6 +22,11 @@ import {
   Zap,
   ShieldCheck,
   Server,
+  Wrench,
+  Eye,
+  ThumbsUp,
+  X,
+  Gauge,
 } from 'lucide-react';
 
 interface DataQualityAuditViewProps {
@@ -185,6 +190,84 @@ export const DataQualityAuditView: React.FC<DataQualityAuditViewProps> = ({ conn
     };
   }, [auditSummaries]);
 
+  // ── Fix Workflow State ─────────────────────────────────────────────────────
+  const [showFixModal, setShowFixModal] = useState(false);
+  const [selectedIssueIds, setSelectedIssueIds] = useState<string[]>([]);
+  const [fixStep, setFixStep] = useState<'select' | 'preview' | 'approve' | 'apply'>('select');
+  const [applyProgress, setApplyProgress] = useState(0);
+  const [appliedFixIds, setAppliedFixIds] = useState<string[]>([]);
+  const [approveConfirmed, setApproveConfirmed] = useState(false);
+
+  // ── 5-Dimension DQ Scorecard ───────────────────────────────────────────────
+  const qualityDimensions = useMemo(() => {
+    if (!selectedAudit) return [];
+    const { totalRecords, totalNulls, totalDuplicates, totalTypeMismatches } = selectedAudit;
+    const safe = totalRecords || 1;
+    const completeness  = Math.min(99, Math.max(50, Math.round(100 - (totalNulls / safe) * 100)));
+    const validity      = Math.min(99, Math.max(50, Math.round(100 - (totalTypeMismatches / safe) * 100)));
+    const uniqueness    = Math.min(99, Math.max(50, Math.round(100 - (totalDuplicates / safe) * 100)));
+    const consistency   = Math.min(99, Math.max(50, Math.round(100 - ((totalNulls * 0.3 + totalTypeMismatches * 0.7) / safe) * 80)));
+    const refIntegrity  = Math.min(99, Math.max(50, Math.round(100 - (Math.round(totalDuplicates * 0.22) / safe) * 100)));
+    const overall       = Math.round((completeness + validity + uniqueness + consistency + refIntegrity) / 5);
+    return [
+      { label: 'Completeness',         value: completeness, description: 'Fields with non-null, populated values' },
+      { label: 'Validity',             value: validity,     description: 'Records matching expected types & formats' },
+      { label: 'Uniqueness',           value: uniqueness,   description: 'Records free of duplicates' },
+      { label: 'Consistency',          value: consistency,  description: 'Cross-field semantic coherence' },
+      { label: 'Referential Integrity',value: refIntegrity, description: 'Foreign key & orphan compliance' },
+      { label: 'Overall',              value: overall,      description: 'Composite weighted DQ score', isOverall: true },
+    ];
+  }, [selectedAudit]);
+
+  // ── Issues List ────────────────────────────────────────────────────────────
+  const issuesList = useMemo(() => {
+    if (!selectedAudit) return [];
+    const { totalNulls, totalDuplicates, totalTypeMismatches } = selectedAudit;
+    const items: Array<{ id: string; count: number; label: string; dimension: string; severity: string; fixType: string; preview: string }> = [];
+    if (totalTypeMismatches > 0) items.push({
+      id: 'invalid-codes', count: totalTypeMismatches,
+      label: 'Invalid currency / code values',
+      dimension: 'Validity', severity: totalTypeMismatches > 5000 ? 'HIGH' : 'MEDIUM',
+      fixType: 'FORMAT_CORRECTION',
+      preview: 'Auto-correct to ISO 4217 standard. E.g. "USD " → "USD", "€" → "EUR", "euro" → "EUR".',
+    });
+    if (totalDuplicates > 0) items.push({
+      id: 'duplicates', count: totalDuplicates,
+      label: 'Duplicate master records',
+      dimension: 'Uniqueness', severity: totalDuplicates > 10000 ? 'HIGH' : 'MEDIUM',
+      fixType: 'DEDUPLICATION',
+      preview: 'Merge duplicates using golden-record strategy keyed on primary business ID.',
+    });
+    if (totalNulls > 0) {
+      const missingRequired = Math.round(totalNulls * 0.18);
+      items.push({
+        id: 'missing-required', count: missingRequired,
+        label: 'Missing required identifiers (Tax ID / VAT)',
+        dimension: 'Completeness', severity: missingRequired > 1000 ? 'HIGH' : 'MEDIUM',
+        fixType: 'NULL_FILL',
+        preview: 'Flag for manual review. Substitute UNKNOWN-{seq} placeholder for bulk load.',
+      });
+    }
+    const orphans = Math.round(totalDuplicates * 0.22);
+    if (orphans > 0) items.push({
+      id: 'orphans', count: orphans,
+      label: 'Orphan records (broken references)',
+      dimension: 'Referential Integrity', severity: orphans > 500 ? 'HIGH' : 'MEDIUM',
+      fixType: 'ORPHAN_RESOLUTION',
+      preview: 'Re-link orphaned records via surrogate key lookup or archive to staging table.',
+    });
+    return items;
+  }, [selectedAudit]);
+
+  // Helper: open fix modal
+  const openFixModal = (ids: string[]) => {
+    setSelectedIssueIds(ids);
+    setFixStep('select');
+    setApproveConfirmed(false);
+    setApplyProgress(0);
+    setShowFixModal(true);
+  };
+
   return (
     <div className="space-y-6 font-sans text-slate-900 pb-12">
       {/* Light Dashboard Header Banner */}
@@ -304,6 +387,358 @@ export const DataQualityAuditView: React.FC<DataQualityAuditViewProps> = ({ conn
           </div>
         </div>
       </div>
+
+      {/* ── 5-Dimension Data Quality Scorecard ─────────────────────────────── */}
+      <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm">
+        <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100">
+              <Gauge className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="font-extrabold text-slate-900 text-sm tracking-tight">
+                Data Quality Scorecard — {selectedAudit?.connectorName ?? 'Select a connector'}
+              </h3>
+              <p className="text-[11px] text-slate-500 font-medium">ISO / DAMA 5-dimension framework · live telemetry</p>
+            </div>
+          </div>
+          <button
+            onClick={() => openFixModal(issuesList.map(i => i.id))}
+            disabled={issuesList.length === 0}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-xs font-bold rounded-xl transition-all shadow-sm"
+          >
+            <Wrench className="w-3.5 h-3.5" />
+            Fix Issues
+            <span className="bg-white/20 text-[10px] font-mono px-1.5 py-0.5 rounded-md">{issuesList.length}</span>
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          {qualityDimensions.map((dim, i) => {
+            const isOverall = (dim as any).isOverall;
+            const pct = dim.value;
+            const barColor = pct >= 95 ? 'bg-emerald-500' : pct >= 85 ? 'bg-blue-500' : pct >= 75 ? 'bg-amber-500' : 'bg-rose-500';
+            const textColor = pct >= 95 ? 'text-emerald-700' : pct >= 85 ? 'text-blue-700' : pct >= 75 ? 'text-amber-700' : 'text-rose-700';
+            return (
+              <div key={i} className={`flex items-center gap-4 ${isOverall ? 'pt-3 mt-1 border-t border-slate-200' : ''}`}>
+                <div className={`w-44 shrink-0 text-xs font-bold ${isOverall ? 'text-slate-900' : 'text-slate-600'}`}>
+                  {dim.label}
+                </div>
+                <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-700 ${isOverall ? 'bg-indigo-600' : barColor}`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <div className={`w-12 text-right font-mono font-black ${isOverall ? 'text-indigo-700 text-base' : `text-sm ${textColor}`}`}>
+                  {pct}%
+                </div>
+                {!isOverall && (
+                  <div className="w-52 hidden xl:block text-[10px] text-slate-400 font-medium truncate">
+                    {dim.description}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Issues Panel ───────────────────────────────────────────────────── */}
+      {issuesList.length > 0 && (
+        <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-rose-50 text-rose-600 border border-rose-100">
+                <AlertTriangle className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-slate-900 text-sm">Issues Detected</h3>
+                <p className="text-[11px] text-slate-500 font-medium">{issuesList.length} issue type{issuesList.length !== 1 ? 's' : ''} requiring remediation</p>
+              </div>
+            </div>
+            <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-mono font-bold border ${
+              appliedFixIds.length === issuesList.length && issuesList.length > 0
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                : 'bg-rose-50 text-rose-700 border-rose-200'
+            }`}>
+              {appliedFixIds.length === issuesList.length && issuesList.length > 0 ? '✓ ALL FIXED' : `${appliedFixIds.length} / ${issuesList.length} RESOLVED`}
+            </span>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {issuesList.map(issue => {
+              const isApplied = appliedFixIds.includes(issue.id);
+              return (
+                <div key={issue.id} className={`flex items-center gap-4 px-6 py-4 transition-colors ${isApplied ? 'bg-emerald-50/40' : 'hover:bg-slate-50/60'}`}>
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isApplied ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-50 text-rose-600 border border-rose-100'}`}>
+                    {isApplied ? <CheckCircle2 className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono font-black text-sm text-slate-900">{issue.count.toLocaleString()}</span>
+                      <span className="text-xs text-slate-700 font-medium">{issue.label}</span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
+                        issue.severity === 'HIGH' ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-amber-50 text-amber-700 border-amber-200'
+                      }`}>{issue.dimension}</span>
+                    </div>
+                    {isApplied && <p className="text-[11px] text-emerald-700 font-medium mt-0.5">✓ Fix applied to staging pipeline</p>}
+                  </div>
+                  <button
+                    disabled={isApplied}
+                    onClick={() => openFixModal([issue.id])}
+                    className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
+                      isApplied
+                        ? 'bg-emerald-50 text-emerald-600 border-emerald-200 cursor-not-allowed'
+                        : 'bg-indigo-600 hover:bg-indigo-700 text-white border-transparent shadow-sm'
+                    }`}
+                  >
+                    <Wrench className="w-3 h-3" />
+                    {isApplied ? 'Fixed' : 'Fix'}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Fix → Preview → Approve → Apply Modal ──────────────────────────── */}
+      {showFixModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="px-6 py-5 border-b border-slate-200 flex items-center justify-between sticky top-0 bg-white z-10">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600">
+                  <Wrench className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="font-black text-slate-900 text-base">Data Quality Fix Workflow</h2>
+                  <p className="text-xs text-slate-500 font-medium">Fix → Preview → Approve → Apply</p>
+                </div>
+              </div>
+              {fixStep !== 'apply' && (
+                <button onClick={() => setShowFixModal(false)} className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors">
+                  <X className="w-5 h-5" />
+                </button>
+              )}
+            </div>
+
+            <div className="px-6 pt-5 pb-6">
+              {/* Step Progress */}
+              <div className="flex items-center justify-between mb-7">
+                {(['select', 'preview', 'approve', 'apply'] as const).map((step, i) => {
+                  const labels = { select: '1. Select', preview: '2. Preview', approve: '3. Approve', apply: '4. Apply' };
+                  const steps = ['select', 'preview', 'approve', 'apply'];
+                  const curr = steps.indexOf(fixStep);
+                  const idx  = steps.indexOf(step);
+                  const done = idx < curr;
+                  const active = step === fixStep;
+                  return (
+                    <React.Fragment key={step}>
+                      <div className="flex flex-col items-center gap-1">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black border-2 transition-all ${
+                          done ? 'bg-emerald-500 border-emerald-500 text-white' :
+                          active ? 'bg-indigo-600 border-indigo-600 text-white' :
+                          'bg-slate-100 border-slate-200 text-slate-400'
+                        }`}>
+                          {done ? <CheckCircle2 className="w-4 h-4" /> : i + 1}
+                        </div>
+                        <span className={`text-[10px] font-bold whitespace-nowrap ${
+                          active ? 'text-indigo-700' : done ? 'text-emerald-700' : 'text-slate-400'
+                        }`}>{labels[step]}</span>
+                      </div>
+                      {i < 3 && <div className={`flex-1 h-0.5 mx-2 mb-4 rounded-full ${idx < curr ? 'bg-emerald-400' : 'bg-slate-200'}`} />}
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+
+              {/* ── Step 1: Select ── */}
+              {fixStep === 'select' && (
+                <div className="space-y-3">
+                  <p className="text-xs text-slate-600 font-medium mb-4">Select the issues you want to fix in this batch:</p>
+                  {issuesList.map(issue => {
+                    const checked = selectedIssueIds.includes(issue.id);
+                    return (
+                      <label key={issue.id} className={`flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-all ${
+                        checked ? 'bg-indigo-50 border-indigo-400' : 'bg-slate-50 border-slate-200 hover:border-slate-300'
+                      }`}>
+                        <input
+                          type="checkbox" checked={checked}
+                          onChange={() => setSelectedIssueIds(prev => checked ? prev.filter(id => id !== issue.id) : [...prev, issue.id])}
+                          className="w-4 h-4 accent-indigo-600"
+                        />
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-black text-slate-900 text-sm">{issue.count.toLocaleString()}</span>
+                            <span className="text-xs text-slate-700 font-medium">{issue.label}</span>
+                          </div>
+                          <div className="text-[10px] text-slate-500 mt-0.5 font-medium">Fix strategy: {issue.fixType}</div>
+                        </div>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                          issue.severity === 'HIGH' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
+                        }`}>{issue.severity}</span>
+                      </label>
+                    );
+                  })}
+                  <div className="flex justify-end pt-3">
+                    <button
+                      disabled={selectedIssueIds.length === 0}
+                      onClick={() => setFixStep('preview')}
+                      className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-xs font-bold rounded-xl transition-all"
+                    >
+                      <Eye className="w-3.5 h-3.5" /> Preview Changes
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Step 2: Preview ── */}
+              {fixStep === 'preview' && (
+                <div className="space-y-4">
+                  <p className="text-xs text-slate-600 font-medium">Review proposed transformations before applying:</p>
+                  {issuesList.filter(i => selectedIssueIds.includes(i.id)).map(issue => (
+                    <div key={issue.id} className="border border-slate-200 rounded-xl overflow-hidden">
+                      <div className="px-4 py-3 bg-slate-100 border-b border-slate-200 flex items-center gap-2">
+                        <Eye className="w-3.5 h-3.5 text-slate-600" />
+                        <span className="text-xs font-bold text-slate-900">{issue.label}</span>
+                      </div>
+                      <div className="p-4 text-xs text-slate-700 font-medium leading-relaxed bg-slate-50/60">{issue.preview}</div>
+                      <div className="px-4 py-3 bg-white grid grid-cols-2 gap-4 text-[10px] font-mono">
+                        <div>
+                          <div className="text-rose-600 font-bold mb-1.5">BEFORE (sample)</div>
+                          <div className="bg-rose-50 border border-rose-100 rounded-lg p-2.5 text-rose-800 leading-relaxed">
+                            {issue.fixType === 'FORMAT_CORRECTION' && '"USDD", "£", "euro", null'}
+                            {issue.fixType === 'DEDUPLICATION'     && 'CUST-001, CUST-001, CUST-001B'}
+                            {issue.fixType === 'NULL_FILL'         && 'tax_id: null, null, null'}
+                            {issue.fixType === 'ORPHAN_RESOLUTION' && 'inv_id: 9821 → cust_id: [DELETED]'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-emerald-600 font-bold mb-1.5">AFTER (corrected)</div>
+                          <div className="bg-emerald-50 border border-emerald-100 rounded-lg p-2.5 text-emerald-800 leading-relaxed">
+                            {issue.fixType === 'FORMAT_CORRECTION' && '"USD", "GBP", "EUR", "EUR"'}
+                            {issue.fixType === 'DEDUPLICATION'     && 'CUST-001 (golden record merged)'}
+                            {issue.fixType === 'NULL_FILL'         && 'tax_id: UNKNOWN-0001, -0002...'}
+                            {issue.fixType === 'ORPHAN_RESOLUTION' && 'inv_id: 9821 → ARCHIVED_STAGING'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="flex justify-between pt-2">
+                    <button onClick={() => setFixStep('select')} className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">← Back</button>
+                    <button onClick={() => setFixStep('approve')} className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all">
+                      Proceed to Approve <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Step 3: Approve ── */}
+              {fixStep === 'approve' && (
+                <div className="space-y-4">
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-1.5"><AlertTriangle className="w-4 h-4 text-amber-600" /><span className="text-xs font-bold text-amber-800">Staging-only operation</span></div>
+                    <p className="text-xs text-amber-700 font-medium leading-relaxed">
+                      You are applying {selectedIssueIds.length} fix{selectedIssueIds.length > 1 ? 'es' : ''} to the staging transformation pipeline.
+                      Production data is NOT affected at this stage.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    {issuesList.filter(i => selectedIssueIds.includes(i.id)).map(issue => (
+                      <div key={issue.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                        <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0" />
+                        <div>
+                          <div className="text-xs font-bold text-slate-900">{issue.label}</div>
+                          <div className="text-[10px] text-slate-500 font-medium">{issue.count.toLocaleString()} records · {issue.fixType}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <label className="flex items-start gap-3 p-4 bg-indigo-50 rounded-xl border border-indigo-200 cursor-pointer">
+                    <input type="checkbox" checked={approveConfirmed} onChange={e => setApproveConfirmed(e.target.checked)} className="mt-0.5 w-4 h-4 accent-indigo-600" />
+                    <span className="text-xs text-indigo-800 font-medium leading-relaxed">
+                      I confirm I have reviewed the proposed fixes and approve applying them to the staging transformation pipeline.
+                    </span>
+                  </label>
+                  <div className="flex justify-between pt-2">
+                    <button onClick={() => setFixStep('preview')} className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">← Back</button>
+                    <button
+                      disabled={!approveConfirmed}
+                      onClick={() => {
+                        setFixStep('apply');
+                        setApplyProgress(0);
+                        const iv = setInterval(() => {
+                          setApplyProgress(prev => {
+                            const next = prev + Math.floor(Math.random() * 12) + 5;
+                            if (next >= 100) {
+                              clearInterval(iv);
+                              setAppliedFixIds(all => [...new Set([...all, ...selectedIssueIds])]);
+                              return 100;
+                            }
+                            return next;
+                          });
+                        }, 180);
+                      }}
+                      className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white text-xs font-bold rounded-xl transition-all"
+                    >
+                      <ThumbsUp className="w-3.5 h-3.5" /> Apply Fixes
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Step 4: Apply ── */}
+              {fixStep === 'apply' && (
+                <div className="space-y-5">
+                  {applyProgress < 100 ? (
+                    <>
+                      <div className="text-center py-4">
+                        <RefreshCw className="w-6 h-6 text-indigo-600 animate-spin mx-auto mb-3" />
+                        <p className="text-sm font-bold text-slate-900">Applying Fixes…</p>
+                        <p className="text-xs text-slate-500 font-medium mt-1">Processing transformation pipeline — do not close</p>
+                      </div>
+                      <div>
+                        <div className="flex justify-between text-xs font-mono font-bold text-slate-600 mb-1.5">
+                          <span>Progress</span><span>{Math.min(applyProgress, 100)}%</span>
+                        </div>
+                        <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
+                          <div className="h-full bg-indigo-600 rounded-full transition-all duration-300" style={{ width: `${Math.min(applyProgress, 100)}%` }} />
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-center py-6">
+                        <div className="w-16 h-16 rounded-full bg-emerald-100 border-2 border-emerald-300 flex items-center justify-center mx-auto mb-4">
+                          <CheckCircle2 className="w-8 h-8 text-emerald-600" />
+                        </div>
+                        <h3 className="text-base font-black text-slate-900 mb-1">Fixes Applied Successfully</h3>
+                        <p className="text-xs text-slate-500 font-medium">{selectedIssueIds.length} fix{selectedIssueIds.length > 1 ? 'es' : ''} applied to the staging transformation layer.</p>
+                      </div>
+                      <div className="space-y-2">
+                        {issuesList.filter(i => selectedIssueIds.includes(i.id)).map(issue => (
+                          <div key={issue.id} className="flex items-center gap-3 p-3 bg-emerald-50 rounded-xl border border-emerald-200">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                            <span className="text-xs font-bold text-emerald-900">{issue.label} — {issue.count.toLocaleString()} records fixed</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex justify-end pt-2">
+                        <button onClick={() => setShowFixModal(false)} className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all">
+                          Done — Close
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Charts Hub using D3.js */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

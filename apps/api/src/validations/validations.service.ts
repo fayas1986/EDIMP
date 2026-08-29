@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestUser } from '../common/auth/auth.guard';
-import { CreateValidationSetDto, UpdateValidationDraftDto, PaginationQueryDto, PaginatedResult } from '@edimp/contracts';
+import { CreateValidationSetDto, UpdateValidationDraftDto, PaginationQueryDto, PaginatedResult, ValidationSetResponse, ValidationVersionResponse } from '@edimp/contracts';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -43,7 +43,7 @@ export class ValidationsService {
     return crypto.createHash('sha256').update(serialized).digest('hex');
   }
 
-  async create(workspaceId: string, dto: CreateValidationSetDto, user: RequestUser) {
+  async create(workspaceId: string, dto: CreateValidationSetDto, user: RequestUser): Promise<ValidationSetResponse> {
     await this.verifyWorkspaceAccess(workspaceId, user.id);
 
     const existing = await this.prisma.validationSet.findFirst({
@@ -58,7 +58,7 @@ export class ValidationsService {
       throw new ConflictException(`ValidationSet with name '${dto.name}' already exists in this workspace`);
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const set = await tx.validationSet.create({
         data: {
           workspaceId,
@@ -98,27 +98,21 @@ export class ValidationsService {
         },
       });
     });
+
+    if (!result) {
+      throw new NotFoundException(`ValidationSet not found after creation`);
+    }
+
+    return result as any as ValidationSetResponse;
   }
 
-  async findAll(workspaceId: string, user: RequestUser, query?: PaginationQueryDto): Promise<any[] | PaginatedResult<any>> {
+  async findAll(workspaceId: string, user: RequestUser, query?: PaginationQueryDto): Promise<PaginatedResult<ValidationSetResponse>> {
     await this.verifyWorkspaceAccess(workspaceId, user.id);
 
     const where = { workspaceId, deletedAt: null };
 
-    if (!query?.page && !query?.pageSize) {
-      return this.prisma.validationSet.findMany({
-        where,
-        include: {
-          versions: {
-            orderBy: { version: 'desc' },
-            take: 1,
-          },
-        },
-      });
-    }
-
-    const page = query.page || 1;
-    const pageSize = query.pageSize || 20;
+    const page = query?.page || 1;
+    const pageSize = query?.pageSize || 20;
 
     const [data, totalItems] = await Promise.all([
       this.prisma.validationSet.findMany({
@@ -129,6 +123,9 @@ export class ValidationsService {
           versions: {
             orderBy: { version: 'desc' },
             take: 1,
+            include: {
+              rules: true,
+            },
           },
         },
       }),
@@ -136,17 +133,17 @@ export class ValidationsService {
     ]);
 
     return {
-      data,
+      data: data as any as ValidationSetResponse[],
       pagination: {
         page,
         pageSize,
         totalItems,
-        totalPages: Math.ceil(totalItems / pageSize),
+        totalPages: Math.ceil(totalItems / pageSize) || 1,
       },
     };
   }
 
-  async findOne(id: string, user: RequestUser) {
+  async findOne(id: string, user: RequestUser): Promise<ValidationSetResponse> {
     const set = await this.prisma.validationSet.findFirst({
       where: { id, deletedAt: null },
       include: {
@@ -165,20 +162,20 @@ export class ValidationsService {
 
     await this.verifyWorkspaceAccess(set.workspaceId, user.id);
 
-    return set;
+    return set as any as ValidationSetResponse;
   }
 
-  async updateDraft(id: string, dto: UpdateValidationDraftDto, user: RequestUser) {
+  async updateDraft(id: string, dto: UpdateValidationDraftDto, user: RequestUser): Promise<ValidationSetResponse> {
     const set = await this.findOne(id, user);
 
-    const latestVersion = set.versions[0];
+    const latestVersion = (set as any).versions[0];
     if (!latestVersion || latestVersion.status !== 'DRAFT') {
       throw new BadRequestException(
         `Cannot update ValidationSet ${id}: no DRAFT version exists. Create a new draft first.`
       );
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       if (dto.name || dto.description !== undefined) {
         await tx.validationSet.update({
           where: { id },
@@ -219,13 +216,19 @@ export class ValidationsService {
         },
       });
     });
+
+    if (!result) {
+      throw new NotFoundException(`ValidationSet not found after update`);
+    }
+
+    return result as any as ValidationSetResponse;
   }
 
   // Atomic pessimistic publication: SELECT parent FOR UPDATE -> validate DRAFT -> supersede PUBLISHED -> publish
-  async publishVersion(validationSetId: string, versionId: string, user: RequestUser) {
+  async publishVersion(validationSetId: string, versionId: string, user: RequestUser): Promise<ValidationVersionResponse> {
     const set = await this.findOne(validationSetId, user);
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       // 1. Pessimistic row locking on parent ValidationSet
       await tx.$executeRawUnsafe(
         `SELECT id FROM "ValidationSet" WHERE id = $1 FOR UPDATE`,
@@ -274,5 +277,7 @@ export class ValidationsService {
 
       return published;
     });
+
+    return result as any as ValidationVersionResponse;
   }
 }

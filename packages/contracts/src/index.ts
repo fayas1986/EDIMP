@@ -4,11 +4,18 @@ import { z } from 'zod';
 // COMMON / ERROR & PAGINATION CONTRACTS
 // ==========================================
 
+export const ErrorDetailSchema = z.object({
+  field: z.string().optional(),
+  message: z.string(),
+  code: z.string().optional(),
+});
+export type ErrorDetail = z.infer<typeof ErrorDetailSchema>;
+
 export const ErrorResponseSchema = z.object({
   statusCode: z.number().int(),
   error: z.string(),
   message: z.string(),
-  details: z.array(z.any()).optional(),
+  details: z.array(ErrorDetailSchema).optional(),
   traceId: z.string().optional(),
 });
 
@@ -16,7 +23,7 @@ export class ErrorResponseDto {
   statusCode!: number;
   error!: string;
   message!: string;
-  details?: any[];
+  details?: ErrorDetail[];
   traceId?: string;
 }
 
@@ -35,16 +42,12 @@ export class PaginationQueryDto {
 }
 
 export interface PaginatedResult<T> {
-  items?: T[];
-  data?: T[];
+  data: T[];
   pagination: {
-    limit?: number;
-    offset?: number;
-    total?: number;
-    page?: number;
-    pageSize?: number;
-    totalItems?: number;
-    totalPages?: number;
+    page: number;
+    pageSize: number;
+    totalItems: number;
+    totalPages: number;
   };
 }
 
@@ -963,5 +966,585 @@ export class RegisterWorkerHeartbeatDto {
   activeLeaseCount?: number;
 }
 
+// ==========================================
+// ASYNC OPERATION RESPONSE CONTRACT
+// ==========================================
+export const AsyncOperationResponseSchema = z.object({
+  id: z.string(),
+  status: z.string(),
+  traceId: z.string().optional(),
+});
+export type AsyncOperationResponse = z.infer<typeof AsyncOperationResponseSchema>;
 
+// ==========================================
+// EXPLICIT RESPONSE SCHEMAS
+// ==========================================
 
+export const TenantResponseSchema = TenantSchema;
+export type TenantResponse = z.infer<typeof TenantResponseSchema>;
+
+export const WorkspaceResponseSchema = WorkspaceSchema;
+export type WorkspaceResponse = z.infer<typeof WorkspaceResponseSchema>;
+
+export const EnvironmentResponseSchema = EnvironmentSchema;
+export type EnvironmentResponse = z.infer<typeof EnvironmentResponseSchema>;
+
+// Sanitized Connection Schema: does NOT leak vaultPath, credentials, or secrets
+export const ConnectionResponseSchema = z.object({
+  id: z.string(),
+  environmentId: z.string(),
+  connectorTypeId: z.string(),
+  name: z.string(),
+  description: z.string().nullable().optional(),
+  status: ConnectionStatusEnum,
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+  deletedAt: z.coerce.date().nullable().optional(),
+});
+export type ConnectionResponse = z.infer<typeof ConnectionResponseSchema>;
+
+export const DataFieldResponseSchema = DataFieldSchema;
+export type DataFieldResponse = z.infer<typeof DataFieldResponseSchema>;
+
+export const DataEntityResponseSchema = DataEntitySchema.extend({
+  fields: z.array(DataFieldResponseSchema).optional(),
+});
+export type DataEntityResponse = z.infer<typeof DataEntityResponseSchema>;
+
+export const DataModelVersionResponseSchema = DataModelVersionSchema.extend({
+  entities: z.array(DataEntityResponseSchema).optional(),
+});
+export type DataModelVersionResponse = z.infer<typeof DataModelVersionResponseSchema>;
+
+export const DataModelResponseSchema = DataModelSchema.extend({
+  versions: z.array(DataModelVersionResponseSchema).optional(),
+});
+export type DataModelResponse = z.infer<typeof DataModelResponseSchema>;
+
+export const DataProfileMetricResponseSchema = DataProfileMetricSchema;
+export type DataProfileMetricResponse = z.infer<typeof DataProfileMetricResponseSchema>;
+
+export const DataProfileRunResponseSchema = DataProfileRunSchema.extend({
+  metrics: z.array(DataProfileMetricResponseSchema).optional(),
+});
+export type DataProfileRunResponse = z.infer<typeof DataProfileRunResponseSchema>;
+
+export const CanonicalFieldResponseSchema = CanonicalFieldSchema;
+export type CanonicalFieldResponse = z.infer<typeof CanonicalFieldResponseSchema>;
+
+export const CanonicalEntityResponseSchema = CanonicalEntitySchema.extend({
+  fields: z.array(CanonicalFieldResponseSchema).optional(),
+});
+export type CanonicalEntityResponse = z.infer<typeof CanonicalEntityResponseSchema>;
+
+export const CanonicalModelVersionResponseSchema = CanonicalModelVersionSchema.extend({
+  entities: z.array(CanonicalEntityResponseSchema).optional(),
+});
+export type CanonicalModelVersionResponse = z.infer<typeof CanonicalModelVersionResponseSchema>;
+
+export const CanonicalModelResponseSchema = CanonicalModelSchema.extend({
+  versions: z.array(CanonicalModelVersionResponseSchema).optional(),
+});
+export type CanonicalModelResponse = z.infer<typeof CanonicalModelResponseSchema>;
+
+// Mapping Set & Version Responses
+export const FieldMappingResponseSchema = z.object({
+  id: z.string(),
+  entityMappingId: z.string(),
+  sourceFieldId: z.string().nullable().optional(),
+  canonicalFieldId: z.string().nullable().optional(),
+  targetFieldId: z.string().nullable().optional(),
+  transformType: TransformTypeEnum,
+  config: z.record(z.any()),
+  createdAt: z.coerce.date(),
+});
+export type FieldMappingResponse = z.infer<typeof FieldMappingResponseSchema>;
+
+export const EntityMappingResponseSchema = z.object({
+  id: z.string(),
+  mappingVersionId: z.string(),
+  sourceEntityId: z.string().nullable().optional(),
+  canonicalEntityId: z.string().nullable().optional(),
+  targetEntityId: z.string().nullable().optional(),
+  createdAt: z.coerce.date(),
+  fieldMappings: z.array(FieldMappingResponseSchema).optional(),
+});
+export type EntityMappingResponse = z.infer<typeof EntityMappingResponseSchema>;
+
+export const MappingVersionResponseSchema = z.object({
+  id: z.string(),
+  mappingSetId: z.string(),
+  canonicalModelVersionId: z.string(),
+  dataModelVersionId: z.string(),
+  version: z.number().int(),
+  status: MappingVersionStatusEnum,
+  definitionHash: z.string().nullable().optional(),
+  publishedAt: z.coerce.date().nullable().optional(),
+  publishedByUserId: z.string().nullable().optional(),
+  createdAt: z.coerce.date(),
+  entityMappings: z.array(EntityMappingResponseSchema).optional(),
+});
+export type MappingVersionResponse = z.infer<typeof MappingVersionResponseSchema>;
+
+export const MappingSetResponseSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  name: z.string(),
+  description: z.string().nullable().optional(),
+  direction: MappingDirectionEnum,
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+  deletedAt: z.coerce.date().nullable().optional(),
+  versions: z.array(MappingVersionResponseSchema).optional(),
+});
+export type MappingSetResponse = z.infer<typeof MappingSetResponseSchema>;
+
+// Transformation Responses
+export const FieldTransformationResponseSchema = z.object({
+  id: z.string(),
+  transformationVersionId: z.string(),
+  targetFieldIdentifier: z.string(),
+  transformType: TransformTypeEnum,
+  config: z.record(z.any()),
+  createdAt: z.coerce.date(),
+});
+export type FieldTransformationResponse = z.infer<typeof FieldTransformationResponseSchema>;
+
+export const TransformationVersionResponseSchema = z.object({
+  id: z.string(),
+  transformationSetId: z.string(),
+  version: z.number().int(),
+  status: TransformationVersionStatusEnum,
+  definitionHash: z.string().nullable().optional(),
+  publishedAt: z.coerce.date().nullable().optional(),
+  publishedByUserId: z.string().nullable().optional(),
+  createdAt: z.coerce.date(),
+  fieldTransformations: z.array(FieldTransformationResponseSchema).optional(),
+});
+export type TransformationVersionResponse = z.infer<typeof TransformationVersionResponseSchema>;
+
+export const TransformationSetResponseSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  name: z.string(),
+  description: z.string().nullable().optional(),
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+  deletedAt: z.coerce.date().nullable().optional(),
+  versions: z.array(TransformationVersionResponseSchema).optional(),
+});
+export type TransformationSetResponse = z.infer<typeof TransformationSetResponseSchema>;
+
+// Validation Responses
+export const FieldValidationRuleResponseSchema = z.object({
+  id: z.string(),
+  validationVersionId: z.string(),
+  targetFieldIdentifier: z.string(),
+  ruleType: RuleTypeEnum,
+  ruleConfig: z.record(z.any()),
+  severity: SeverityEnum,
+  createdAt: z.coerce.date(),
+});
+export type FieldValidationRuleResponse = z.infer<typeof FieldValidationRuleResponseSchema>;
+
+export const ValidationVersionResponseSchema = z.object({
+  id: z.string(),
+  validationSetId: z.string(),
+  version: z.number().int(),
+  status: ValidationVersionStatusEnum,
+  definitionHash: z.string().nullable().optional(),
+  publishedAt: z.coerce.date().nullable().optional(),
+  publishedByUserId: z.string().nullable().optional(),
+  createdAt: z.coerce.date(),
+  rules: z.array(FieldValidationRuleResponseSchema).optional(),
+});
+export type ValidationVersionResponse = z.infer<typeof ValidationVersionResponseSchema>;
+
+export const ValidationSetResponseSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  name: z.string(),
+  description: z.string().nullable().optional(),
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+  deletedAt: z.coerce.date().nullable().optional(),
+  versions: z.array(ValidationVersionResponseSchema).optional(),
+});
+export type ValidationSetResponse = z.infer<typeof ValidationSetResponseSchema>;
+
+// Pipeline Responses
+export const PipelineJobResponseSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  environmentId: z.string(),
+  mappingVersionId: z.string(),
+  transformationVersionId: z.string(),
+  validationVersionId: z.string(),
+  name: z.string(),
+  description: z.string().nullable().optional(),
+  status: PipelineJobStatusEnum,
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+  deletedAt: z.coerce.date().nullable().optional(),
+});
+export type PipelineJobResponse = z.infer<typeof PipelineJobResponseSchema>;
+
+// BigInt counters serialized as strings/numbers for Javascript safety
+export const PipelineExecutionRunResponseSchema = z.object({
+  id: z.string(),
+  pipelineJobId: z.string(),
+  mappingVersionId: z.string(),
+  transformationVersionId: z.string(),
+  validationVersionId: z.string(),
+  mappingDefinitionHash: z.string().nullable().optional(),
+  transformationDefinitionHash: z.string().nullable().optional(),
+  validationDefinitionHash: z.string().nullable().optional(),
+  status: ExecutionRunStatusEnum,
+  errorCode: z.string().nullable().optional(),
+  errorMessage: z.string().nullable().optional(),
+  recordsProcessed: z.string(),
+  recordsTransformed: z.string(),
+  recordsValidated: z.string(),
+  recordsValidationFailed: z.string(),
+  recordsTransformationFailed: z.string(),
+  queuedAt: z.coerce.date(),
+  startedAt: z.coerce.date().nullable().optional(),
+  completedAt: z.coerce.date().nullable().optional(),
+  createdAt: z.coerce.date(),
+});
+export type PipelineExecutionRunResponse = z.infer<typeof PipelineExecutionRunResponseSchema>;
+
+// Migration Responses
+export const MigrationJobResponseSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  environmentId: z.string(),
+  name: z.string(),
+  description: z.string().nullable().optional(),
+  status: MigrationJobStatusEnum,
+  loadStrategy: z.string(),
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+  deletedAt: z.coerce.date().nullable().optional(),
+});
+export type MigrationJobResponse = z.infer<typeof MigrationJobResponseSchema>;
+
+export const MigrationConfigurationVersionResponseSchema = z.object({
+  id: z.string(),
+  migrationJobId: z.string(),
+  version: z.number().int(),
+  status: MigrationConfigVersionStatusEnum,
+  sourceConnectionId: z.string(),
+  targetConnectionId: z.string(),
+  sourceDataModelVersionId: z.string(),
+  targetDataModelVersionId: z.string(),
+  mappingVersionId: z.string(),
+  transformationVersionId: z.string(),
+  validationVersionId: z.string(),
+  configurationHash: z.string().nullable().optional(),
+  publishedAt: z.coerce.date().nullable().optional(),
+  publishedByUserId: z.string().nullable().optional(),
+  createdAt: z.coerce.date(),
+});
+export type MigrationConfigurationVersionResponse = z.infer<typeof MigrationConfigurationVersionResponseSchema>;
+
+// BigInt counters serialized as strings
+export const MigrationRunResponseSchema = z.object({
+  id: z.string(),
+  migrationConfigurationVersionId: z.string(),
+  status: MigrationRunStatusEnum,
+  workerLeaseId: z.string().nullable().optional(),
+  workerHeartbeatAt: z.coerce.date().nullable().optional(),
+  leaseExpiresAt: z.coerce.date().nullable().optional(),
+  recordsExtracted: z.string(),
+  recordsProcessed: z.string(),
+  recordsTransformed: z.string(),
+  recordsValidated: z.string(),
+  recordsLoaded: z.string(),
+  recordsInserted: z.string(),
+  recordsUpdated: z.string(),
+  recordsSkipped: z.string(),
+  recordsFailed: z.string(),
+  recordsRetried: z.string(),
+  batchesTotal: z.number().int(),
+  batchesCompleted: z.number().int(),
+  queuedAt: z.coerce.date(),
+  startedAt: z.coerce.date().nullable().optional(),
+  completedAt: z.coerce.date().nullable().optional(),
+  createdAt: z.coerce.date(),
+});
+export type MigrationRunResponse = z.infer<typeof MigrationRunResponseSchema>;
+
+// Reconciliation Responses
+export const ReconciliationJobResponseSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  environmentId: z.string(),
+  name: z.string(),
+  description: z.string().nullable().optional(),
+  status: z.string(),
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+  deletedAt: z.coerce.date().nullable().optional(),
+});
+export type ReconciliationJobResponse = z.infer<typeof ReconciliationJobResponseSchema>;
+
+export const ReconciliationConfigurationVersionResponseSchema = z.object({
+  id: z.string(),
+  reconciliationJobId: z.string(),
+  version: z.number().int(),
+  status: z.string(),
+  sourceConnectionId: z.string(),
+  targetConnectionId: z.string(),
+  sourceDataModelVersionId: z.string(),
+  targetDataModelVersionId: z.string(),
+  sourceEntityIdentifier: z.string(),
+  targetEntityIdentifier: z.string(),
+  identityMapping: z.record(z.string()),
+  comparisonFields: z.array(z.record(z.any())),
+  aggregateFields: z.array(z.record(z.any())),
+  mode: ReconciliationModeEnum,
+  samplingConfig: z.record(z.any()),
+  watermarkConfig: z.record(z.any()),
+  configurationHash: z.string().nullable().optional(),
+  publishedAt: z.coerce.date().nullable().optional(),
+  publishedByUserId: z.string().nullable().optional(),
+  createdAt: z.coerce.date(),
+});
+export type ReconciliationConfigurationVersionResponse = z.infer<typeof ReconciliationConfigurationVersionResponseSchema>;
+
+// BigInt counters serialized as strings
+export const ReconciliationRunResponseSchema = z.object({
+  id: z.string(),
+  reconciliationConfigurationVersionId: z.string(),
+  migrationRunId: z.string().nullable().optional(),
+  status: ReconciliationRunStatusEnum,
+  workerLeaseId: z.string().nullable().optional(),
+  workerHeartbeatAt: z.coerce.date().nullable().optional(),
+  leaseExpiresAt: z.coerce.date().nullable().optional(),
+  totalRecordsCompared: z.string(),
+  discrepanciesFound: z.string(),
+  missingCount: z.string(),
+  orphanCount: z.string(),
+  attributeMismatchCount: z.string(),
+  aggregateMismatchCount: z.string(),
+  batchesTotal: z.number().int(),
+  batchesCompleted: z.number().int(),
+  startedAt: z.coerce.date().nullable().optional(),
+  completedAt: z.coerce.date().nullable().optional(),
+  createdAt: z.coerce.date(),
+});
+export type ReconciliationRunResponse = z.infer<typeof ReconciliationRunResponseSchema>;
+
+export const ReconciliationDiscrepancyResponseSchema = z.object({
+  id: z.string(),
+  reconciliationConfigurationVersionId: z.string(),
+  discrepancyIdentityKey: z.string(),
+  sourceRecordId: z.string().nullable().optional(),
+  targetRecordId: z.string().nullable().optional(),
+  fieldIdentifier: z.string().nullable().optional(),
+  discrepancyType: DiscrepancyTypeEnum,
+  status: DiscrepancyStatusEnum,
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+});
+export type ReconciliationDiscrepancyResponse = z.infer<typeof ReconciliationDiscrepancyResponseSchema>;
+
+// Error Resolution & RecordError Response
+export const RecordErrorResponseSchema = z.object({
+  id: z.string(),
+  migrationRecordId: z.string(),
+  errorCategory: ErrorCategoryEnum,
+  errorCode: z.string(),
+  errorMessage: z.string(),
+  failedStage: z.string(),
+  sanitizedDiagnostics: z.record(z.any()),
+  resolutionStatus: ErrorResolutionStatusEnum,
+  assignedToUserId: z.string().nullable().optional(),
+  resolvedByUserId: z.string().nullable().optional(),
+  resolvedAt: z.coerce.date().nullable().optional(),
+  createdAt: z.coerce.date(),
+});
+export type RecordErrorResponse = z.infer<typeof RecordErrorResponseSchema>;
+
+// AI Recommendation Responses
+export const AiAgentTaskResponseSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  environmentId: z.string(),
+  agentType: AiAgentTypeEnum,
+  status: AiTaskStatusEnum,
+  agentVersion: z.string(),
+  algorithmVersion: z.string(),
+  providerName: z.string(),
+  inputHash: z.string(),
+  taskParameters: z.record(z.any()),
+  errorMessage: z.string().nullable().optional(),
+  executionTimeMs: z.number().int().nullable().optional(),
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+});
+export type AiAgentTaskResponse = z.infer<typeof AiAgentTaskResponseSchema>;
+
+export const AiMappingSuggestionResponseSchema = z.object({
+  id: z.string(),
+  taskId: z.string(),
+  workspaceId: z.string(),
+  sourceDataModelVerId: z.string().nullable().optional(),
+  targetDataModelVerId: z.string().nullable().optional(),
+  canonicalModelVerId: z.string().nullable().optional(),
+  mappingVersionId: z.string().nullable().optional(),
+  profileRunId: z.string().nullable().optional(),
+  sourceEntity: z.string(),
+  sourceField: z.string(),
+  targetEntity: z.string(),
+  targetField: z.string().nullable().optional(),
+  suggestedTransform: z.string().nullable().optional(),
+  suggestedValidation: z.string().nullable().optional(),
+  status: AiSuggestionStatusEnum,
+  nameScore: z.number(),
+  semanticScore: z.number(),
+  typeCompatibilityScore: z.number(),
+  profileScore: z.number(),
+  finalConfidenceScore: z.number(),
+  reasoning: z.string(),
+  evidence: z.record(z.any()),
+  agentVersion: z.string(),
+  algorithmVersion: z.string(),
+  acceptedByUserId: z.string().nullable().optional(),
+  acceptedAt: z.coerce.date().nullable().optional(),
+  newDraftMappingVerId: z.string().nullable().optional(),
+  rejectedByUserId: z.string().nullable().optional(),
+  rejectedAt: z.coerce.date().nullable().optional(),
+  rejectionReason: z.string().nullable().optional(),
+  createdAt: z.coerce.date(),
+});
+export type AiMappingSuggestionResponse = z.infer<typeof AiMappingSuggestionResponseSchema>;
+
+export const AiDriftRepairSuggestionResponseSchema = z.object({
+  id: z.string(),
+  taskId: z.string(),
+  workspaceId: z.string(),
+  baselineModelVerId: z.string(),
+  targetModelVerId: z.string(),
+  entityName: z.string(),
+  fieldName: z.string().nullable().optional(),
+  renamedToFieldName: z.string().nullable().optional(),
+  category: DriftCategoryEnum,
+  severity: DriftSeverityEnum,
+  status: AiSuggestionStatusEnum,
+  confidenceScore: z.number(),
+  reasoning: z.string(),
+  suggestedRepairPlan: z.record(z.any()),
+  agentVersion: z.string(),
+  algorithmVersion: z.string(),
+  approvedByUserId: z.string().nullable().optional(),
+  approvedAt: z.coerce.date().nullable().optional(),
+  createdDraftVersionId: z.string().nullable().optional(),
+  createdAt: z.coerce.date(),
+});
+export type AiDriftRepairSuggestionResponse = z.infer<typeof AiDriftRepairSuggestionResponseSchema>;
+
+export const AiAnomalyAnalysisResponseSchema = z.object({
+  id: z.string(),
+  taskId: z.string(),
+  workspaceId: z.string(),
+  reconciliationDiscrepancyId: z.string().nullable().optional(),
+  dataProfileRunId: z.string().nullable().optional(),
+  anomalyType: AnomalyTypeEnum,
+  status: AiSuggestionStatusEnum,
+  confidenceScore: z.number(),
+  sampleSize: z.number().int().nullable().optional(),
+  meanValue: z.number().nullable().optional(),
+  stdDevValue: z.number().nullable().optional(),
+  medianValue: z.number().nullable().optional(),
+  iqrValue: z.number().nullable().optional(),
+  zScoreValue: z.number().nullable().optional(),
+  thresholdUsed: z.number().nullable().optional(),
+  statisticalEvidence: z.record(z.any()),
+  rootCauseAnalysis: z.string(),
+  recommendedAction: z.string(),
+  agentVersion: z.string(),
+  algorithmVersion: z.string(),
+  reviewedByUserId: z.string().nullable().optional(),
+  reviewedAt: z.coerce.date().nullable().optional(),
+  createdAt: z.coerce.date(),
+});
+export type AiAnomalyAnalysisResponse = z.infer<typeof AiAnomalyAnalysisResponseSchema>;
+
+// Observability and Audit Log Responses
+export const AuditLogResponseSchema = z.object({
+  id: z.string(),
+  tenantId: z.string().nullable().optional(),
+  workspaceId: z.string().nullable().optional(),
+  environmentId: z.string().nullable().optional(),
+  userId: z.string().nullable().optional(),
+  action: AuditActionEnum,
+  resourceType: z.string(),
+  resourceId: z.string().nullable().optional(),
+  traceId: z.string().nullable().optional(),
+  ipAddress: z.string().nullable().optional(),
+  userAgent: z.string().nullable().optional(),
+  details: z.record(z.any()),
+  createdAt: z.coerce.date(),
+});
+export type AuditLogResponse = z.infer<typeof AuditLogResponseSchema>;
+
+export const WorkerNodeResponseSchema = z.object({
+  id: z.string(),
+  workerId: z.string(),
+  hostname: z.string(),
+  ipAddress: z.string().nullable().optional(),
+  status: WorkerStatusEnum,
+  lastHeartbeatAt: z.coerce.date(),
+  activeLeaseCount: z.number().int(),
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+});
+export type WorkerNodeResponse = z.infer<typeof WorkerNodeResponseSchema>;
+
+export const ErrorManualOverrideResponseSchema = z.object({
+  id: z.string(),
+  recordErrorId: z.string(),
+  originalPayload: z.record(z.any()),
+  overridePayload: z.record(z.any()),
+  overrideReason: z.string(),
+  overriddenByUserId: z.string(),
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+});
+export type ErrorManualOverrideResponse = z.infer<typeof ErrorManualOverrideResponseSchema>;
+
+export const ErrorReplayResponseSchema = z.object({
+  errorId: z.string(),
+  status: z.string(),
+  replayRunId: z.string(),
+});
+export type ErrorReplayResponse = z.infer<typeof ErrorReplayResponseSchema>;
+
+export const BulkResolveErrorsResponseSchema = z.object({
+  status: z.number(),
+  message: z.string(),
+  results: z.array(z.any()),
+});
+export type BulkResolveErrorsResponse = z.infer<typeof BulkResolveErrorsResponseSchema>;
+
+export const PreviewTransformResponseSchema = z.object({
+  transformedRecords: z.array(z.record(z.any())),
+  validationResults: z.array(z.any()),
+});
+export type PreviewTransformResponse = z.infer<typeof PreviewTransformResponseSchema>;
+
+export const AcceptAiSuggestionResponseSchema = z.object({
+  suggestion: AiMappingSuggestionResponseSchema,
+  createdDraftVersion: MappingVersionResponseSchema,
+});
+export type AcceptAiSuggestionResponse = z.infer<typeof AcceptAiSuggestionResponseSchema>;
+
+export const ExecuteNaturalLanguageQueryResponseSchema = z.object({
+  sessionId: z.string(),
+  messageId: z.string(),
+  queryPlan: z.any(),
+  results: z.array(z.any()),
+});
+export type ExecuteNaturalLanguageQueryResponse = z.infer<typeof ExecuteNaturalLanguageQueryResponseSchema>;

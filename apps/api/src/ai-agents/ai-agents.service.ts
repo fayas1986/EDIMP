@@ -14,6 +14,10 @@ import {
   AcceptAiSuggestionDto,
   RejectAiSuggestionDto,
   StructuredQueryPlanSchema,
+  PaginationQueryDto,
+  PaginatedResult,
+  AiAgentTaskResponse,
+  AsyncOperationResponse,
 } from '@edimp/contracts';
 import { DeterministicProvider } from './providers/deterministic-provider';
 import * as crypto from 'crypto';
@@ -55,7 +59,7 @@ export class AiAgentsService {
   /**
    * 1. Trigger Asynchronous Idempotent Mapping Suggestion Task
    */
-  async triggerMappingSuggestionTask(workspaceId: string, dto: TriggerAiMappingSuggestionDto) {
+  async triggerMappingSuggestionTask(workspaceId: string, dto: TriggerAiMappingSuggestionDto): Promise<AsyncOperationResponse> {
     await this.validateWorkspaceEnvironment(workspaceId, dto.environmentId);
 
     const agentVersion = 'mapping-agent-v1.0';
@@ -73,7 +77,10 @@ export class AiAgentsService {
 
     if (existingTask) {
       this.logger.log(`Reusing existing idempotent task ${existingTask.id} for inputHash ${inputHash}`);
-      return existingTask;
+      return {
+        id: existingTask.id,
+        status: existingTask.status,
+      };
     }
 
     // Create task (PENDING)
@@ -98,7 +105,10 @@ export class AiAgentsService {
       });
     });
 
-    return task;
+    return {
+      id: task.id,
+      status: 'PENDING',
+    };
   }
 
   private async executeMappingTask(taskId: string, workspaceId: string, dto: TriggerAiMappingSuggestionDto) {
@@ -398,7 +408,7 @@ export class AiAgentsService {
   /**
    * 4. Trigger Schema Drift Repair Agent
    */
-  async triggerDriftRepairTask(workspaceId: string, dto: TriggerAiDriftRepairDto) {
+  async triggerDriftRepairTask(workspaceId: string, dto: TriggerAiDriftRepairDto): Promise<AsyncOperationResponse> {
     await this.validateWorkspaceEnvironment(workspaceId, dto.environmentId);
 
     const inputHash = crypto.createHash('sha256')
@@ -463,16 +473,16 @@ export class AiAgentsService {
       data: { status: 'COMPLETED', executionTimeMs: 150 },
     });
 
-    return this.prisma.aiAgentTask.findUnique({
-      where: { id: task.id },
-      include: { driftSuggestions: true },
-    });
+    return {
+      id: task.id,
+      status: 'COMPLETED',
+    };
   }
 
   /**
    * 5. Trigger Anomaly Detection Agent (Sufficient Baseline Enforcement)
    */
-  async triggerAnomalyAnalysisTask(workspaceId: string, dto: TriggerAiAnomalyAnalysisDto) {
+  async triggerAnomalyAnalysisTask(workspaceId: string, dto: TriggerAiAnomalyAnalysisDto): Promise<AsyncOperationResponse> {
     await this.validateWorkspaceEnvironment(workspaceId, dto.environmentId);
 
     const inputHash = crypto.createHash('sha256')
@@ -529,10 +539,10 @@ export class AiAgentsService {
       data: { status: 'COMPLETED', executionTimeMs: 120 },
     });
 
-    return this.prisma.aiAgentTask.findUnique({
-      where: { id: task.id },
-      include: { anomalyAnalyses: true },
-    });
+    return {
+      id: task.id,
+      status: 'COMPLETED',
+    };
   }
 
   /**
@@ -686,16 +696,29 @@ export class AiAgentsService {
     };
   }
 
-  async listWorkspaceTasks(workspaceId: string) {
-    const tasks = await this.prisma.aiAgentTask.findMany({
-      where: { workspaceId },
-      include: {
-        mappingSuggestions: true,
-        driftSuggestions: true,
-        anomalyAnalyses: true,
+  async listWorkspaceTasks(workspaceId: string, query?: PaginationQueryDto): Promise<PaginatedResult<AiAgentTaskResponse>> {
+    const page = query?.page || 1;
+    const pageSize = query?.pageSize || 20;
+    const where = { workspaceId };
+
+    const [tasks, totalItems] = await Promise.all([
+      this.prisma.aiAgentTask.findMany({
+        where,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.aiAgentTask.count({ where }),
+    ]);
+
+    return {
+      data: tasks as any as AiAgentTaskResponse[],
+      pagination: {
+        page,
+        pageSize,
+        totalItems,
+        totalPages: Math.ceil(totalItems / pageSize) || 1,
       },
-      orderBy: { createdAt: 'desc' },
-    });
-    return tasks;
+    };
   }
 }

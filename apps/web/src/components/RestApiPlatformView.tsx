@@ -861,27 +861,27 @@ public class ApiClient {
                       <div key={row.day} className="flex mb-1 items-center">
                         <div className="w-12 text-xs text-slate-500 font-medium">{row.day}</div>
                         {row.data.map((val, j) => {
-                          const opacity = Math.max(0.1, val / 110);
-                          return (
-                            <div 
-                              key={j} 
-                              className="flex-1 w-8 h-8 rounded-sm mx-0.5"
-                              style={{ backgroundColor: `rgba(99, 102, 241, ${opacity})` }}
-                              title={`${row.day} ${j}:00 - ${val} requests/min`}
-                            ></div>
-                          );
-                        })}
-                      </div>
-                    ))}
-                    <div className="flex items-center justify-end mt-4 text-xs text-slate-500 gap-2">
-                      <span>Less traffic</span>
-                      <div className="flex gap-1">
-                        <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: 'rgba(99, 102, 241, 0.1)' }}></div>
-                        <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: 'rgba(99, 102, 241, 0.4)' }}></div>
-                        <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: 'rgba(99, 102, 241, 0.7)' }}></div>
-                        <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: 'rgba(99, 102, 241, 1)' }}></div>
-                      </div>
-                      <span>More traffic</span>
+                           const opacity = Math.max(0.1, val / 110);
+                           return (
+                             <div 
+                               key={j} 
+                               className="flex-1 w-8 h-8 rounded-sm mx-0.5"
+                               style={{ backgroundColor: 'var(--accent-primary)', opacity }}
+                               title={`${row.day} ${j}:00 - ${val} requests/min`}
+                             ></div>
+                           );
+                         })}
+                       </div>
+                     ))}
+                     <div className="flex items-center justify-end mt-4 text-xs text-slate-500 gap-2">
+                       <span>Less traffic</span>
+                       <div className="flex gap-1">
+                         <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: 'var(--accent-primary)', opacity: 0.1 }}></div>
+                         <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: 'var(--accent-primary)', opacity: 0.4 }}></div>
+                         <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: 'var(--accent-primary)', opacity: 0.7 }}></div>
+                         <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: 'var(--accent-primary)', opacity: 1.0 }}></div>
+                       </div>
+                       <span>More traffic</span>
                     </div>
                   </div>
                 </div>

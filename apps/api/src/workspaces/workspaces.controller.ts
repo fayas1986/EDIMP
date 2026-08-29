@@ -3,13 +3,14 @@ import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse, ApiQuery } from '@ne
 import { WorkspacesService } from './workspaces.service';
 import { CreateWorkspaceDto, UpdateWorkspaceDto } from './dto/workspace.dto';
 import { AuthGuard, RequestUser } from '../common/auth/auth.guard';
+import { TenantWorkspaceGuard } from '../common/guards/tenant.guard';
 import { CurrentUser } from '../common/auth/current-user.decorator';
-import { PaginationQuerySchema, PaginationQueryDto, PaginatedResult, Workspace } from '@edimp/contracts';
+import { PaginationQuerySchema, PaginationQueryDto, PaginatedResult, WorkspaceResponse } from '@edimp/contracts';
 import { ZodValidationPipe } from 'nestjs-zod';
 
 @ApiTags('Workspaces')
 @ApiBearerAuth()
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, TenantWorkspaceGuard)
 @Controller('tenants/:tenantId/workspaces')
 export class WorkspacesController {
   constructor(private readonly workspacesService: WorkspacesService) {}
@@ -23,7 +24,7 @@ export class WorkspacesController {
     @Param('tenantId') tenantId: string,
     @Body() createWorkspaceDto: CreateWorkspaceDto,
     @CurrentUser() user: RequestUser,
-  ): Promise<Workspace> {
+  ): Promise<WorkspaceResponse> {
     return this.workspacesService.create(tenantId, createWorkspaceDto, user);
   }
 
@@ -37,7 +38,7 @@ export class WorkspacesController {
     @Param('tenantId') tenantId: string,
     @Query(new ZodValidationPipe(PaginationQuerySchema)) query: PaginationQueryDto,
     @CurrentUser() user: RequestUser,
-  ): Promise<Workspace[] | PaginatedResult<Workspace>> {
+  ): Promise<PaginatedResult<WorkspaceResponse>> {
     return this.workspacesService.findAll(tenantId, user, query);
   }
 
@@ -50,7 +51,7 @@ export class WorkspacesController {
     @Param('tenantId') tenantId: string,
     @Param('id') id: string,
     @CurrentUser() user: RequestUser,
-  ): Promise<Workspace> {
+  ): Promise<WorkspaceResponse> {
     return this.workspacesService.findOne(tenantId, id, user);
   }
 
@@ -64,7 +65,7 @@ export class WorkspacesController {
     @Param('id') id: string,
     @Body() updateWorkspaceDto: UpdateWorkspaceDto,
     @CurrentUser() user: RequestUser,
-  ): Promise<Workspace> {
+  ): Promise<WorkspaceResponse> {
     return this.workspacesService.update(tenantId, id, updateWorkspaceDto, user);
   }
 
@@ -77,7 +78,7 @@ export class WorkspacesController {
     @Param('tenantId') tenantId: string,
     @Param('id') id: string,
     @CurrentUser() user: RequestUser,
-  ): Promise<Workspace> {
+  ): Promise<WorkspaceResponse> {
     return this.workspacesService.remove(tenantId, id, user);
   }
 }

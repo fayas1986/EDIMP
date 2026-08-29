@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { AuditLogQueryDto } from '@edimp/contracts';
+import { AuditLogQueryDto, AuditLogResponse, PaginatedResult } from '@edimp/contracts';
 import { AuditAction } from '@edimp/database';
 
 export interface MetricDefinition {
@@ -183,18 +183,36 @@ export class ObservabilityService {
   /**
    * Read-Only Workspace Audit Logs Querying (Append-Only Enforced)
    */
-  async listAuditLogs(workspaceId: string, query: AuditLogQueryDto) {
+  async listAuditLogs(workspaceId: string, query: AuditLogQueryDto): Promise<PaginatedResult<AuditLogResponse>> {
     const where: any = { workspaceId };
     if (query.action) where.action = query.action;
     if (query.resourceType) where.resourceType = query.resourceType;
     if (query.traceId) where.traceId = query.traceId;
 
-    return this.prisma.auditLog.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      take: query.limit || 20,
-      skip: query.offset || 0,
-    });
+    const limit = query.limit || 20;
+    const offset = query.offset || 0;
+
+    const [data, totalItems] = await Promise.all([
+      this.prisma.auditLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset,
+      }),
+      this.prisma.auditLog.count({ where }),
+    ]);
+
+    const page = Math.floor(offset / limit) + 1;
+
+    return {
+      data: data as any as AuditLogResponse[],
+      pagination: {
+        page,
+        pageSize: limit,
+        totalItems,
+        totalPages: Math.ceil(totalItems / limit) || 1,
+      },
+    };
   }
 
   /**

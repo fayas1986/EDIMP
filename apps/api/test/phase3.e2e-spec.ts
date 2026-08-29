@@ -165,6 +165,7 @@ describe('Phase 3 E2E & Mapping Architecture Tests', () => {
     it('should create a CanonicalModel with initial DRAFT version 1', async () => {
       const res = await request(app.getHttpServer())
         .post(`/api/v1/workspaces/${workspace1.id}/canonical-models`)
+        .set('x-user-id', user1.id)
         .send({
           name: 'Global Customer Domain',
           description: 'Standardized Customer Definition',
@@ -191,6 +192,7 @@ describe('Phase 3 E2E & Mapping Architecture Tests', () => {
       const draftVer = canonicalModel1.versions[0];
       const res = await request(app.getHttpServer())
         .post(`/api/v1/canonical-models/${canonicalModel1.id}/versions/${draftVer.id}/publish`)
+        .set('x-user-id', user1.id)
         .expect(201);
 
       canonicalModelVersion1 = res.body;
@@ -203,6 +205,7 @@ describe('Phase 3 E2E & Mapping Architecture Tests', () => {
     it('should prevent modifying an already PUBLISHED CanonicalModelVersion', async () => {
       await request(app.getHttpServer())
         .patch(`/api/v1/canonical-models/${canonicalModel1.id}/draft`)
+        .set('x-user-id', user1.id)
         .send({ name: 'Should Fail Edit' })
         .expect(400);
     });
@@ -212,6 +215,7 @@ describe('Phase 3 E2E & Mapping Architecture Tests', () => {
     it('should create SOURCE_TO_CANONICAL MappingSet with draft version 1', async () => {
       const res = await request(app.getHttpServer())
         .post(`/api/v1/workspaces/${workspace1.id}/mapping-sets`)
+        .set('x-user-id', user1.id)
         .send({
           name: 'SAP ECC -> Canonical Customer',
           direction: 'SOURCE_TO_CANONICAL',
@@ -229,6 +233,7 @@ describe('Phase 3 E2E & Mapping Architecture Tests', () => {
     it('should create CANONICAL_TO_TARGET MappingSet with draft version 1', async () => {
       const res = await request(app.getHttpServer())
         .post(`/api/v1/workspaces/${workspace1.id}/mapping-sets`)
+        .set('x-user-id', user1.id)
         .send({
           name: 'Canonical Customer -> Salesforce',
           direction: 'CANONICAL_TO_TARGET',
@@ -245,10 +250,12 @@ describe('Phase 3 E2E & Mapping Architecture Tests', () => {
     it('should prevent cross-workspace access to CanonicalModel and MappingSet', async () => {
       await request(app.getHttpServer())
         .get(`/api/v1/workspaces/${workspace2.id}/mapping-sets`)
+        .set('x-user-id', user1.id)
         .expect(403);
 
       await request(app.getHttpServer())
         .get(`/api/v1/workspaces/${workspace2.id}/canonical-models`)
+        .set('x-user-id', user1.id)
         .expect(403);
     });
   });
@@ -264,6 +271,7 @@ describe('Phase 3 E2E & Mapping Architecture Tests', () => {
 
       await request(app.getHttpServer())
         .patch(`/api/v1/mapping-sets/${mappingSetSourceToCanonical.id}/draft`)
+        .set('x-user-id', user1.id)
         .send({
           entityMappings: [
             {
@@ -301,6 +309,7 @@ describe('Phase 3 E2E & Mapping Architecture Tests', () => {
       // Patch draft with unlinked entity (DB FK is valid, but doesn't match mappingSet's dataModelVersionId)
       await request(app.getHttpServer())
         .patch(`/api/v1/mapping-sets/${mappingSetSourceToCanonical.id}/draft`)
+        .set('x-user-id', user1.id)
         .send({
           entityMappings: [
             {
@@ -315,6 +324,7 @@ describe('Phase 3 E2E & Mapping Architecture Tests', () => {
       // Pre-publication validator must reject unlinked entity reference with 400
       await request(app.getHttpServer())
         .post(`/api/v1/mapping-sets/${mappingSetSourceToCanonical.id}/versions/${draftVer.id}/publish`)
+        .set('x-user-id', user1.id)
         .expect(400);
     });
 
@@ -336,6 +346,7 @@ describe('Phase 3 E2E & Mapping Architecture Tests', () => {
       // Update draft with valid references
       await request(app.getHttpServer())
         .patch(`/api/v1/mapping-sets/${mappingSetSourceToCanonical.id}/draft`)
+        .set('x-user-id', user1.id)
         .send({
           entityMappings: [
             {
@@ -356,6 +367,7 @@ describe('Phase 3 E2E & Mapping Architecture Tests', () => {
       const draftVer = mappingSetSourceToCanonical.versions[0];
       const res = await request(app.getHttpServer())
         .post(`/api/v1/mapping-sets/${mappingSetSourceToCanonical.id}/versions/${draftVer.id}/publish`)
+        .set('x-user-id', user1.id)
         .expect(201);
 
       expect(res.body.status).toBe('PUBLISHED');
@@ -367,6 +379,7 @@ describe('Phase 3 E2E & Mapping Architecture Tests', () => {
     it('should enforce immutability of PUBLISHED MappingVersions', async () => {
       await request(app.getHttpServer())
         .patch(`/api/v1/mapping-sets/${mappingSetSourceToCanonical.id}/draft`)
+        .set('x-user-id', user1.id)
         .send({ name: 'Should Fail Modify Published' })
         .expect(400);
     });

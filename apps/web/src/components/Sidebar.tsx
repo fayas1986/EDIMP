@@ -41,6 +41,7 @@ import {
   KeyRound,
   HeartPulse,
   Sliders,
+  Radio,
 } from 'lucide-react';
 
 export interface MenuItem {
@@ -175,6 +176,7 @@ export const menuGroups: MenuGroup[] = [
       items: [
         { id: 'wizard', label: 'Migration Wizard', icon: Zap, badge: null, permissions: ['Project Manager', 'Migration Consultant', 'Data Engineer', 'Customer Administrator'] },
         { id: 'simulation', label: 'Dry-Run Simulation', icon: FlaskConical, badge: null, permissions: ['Project Manager', 'Migration Consultant', 'Data Engineer', 'Customer Administrator'] },
+        { id: 'control-tower', label: 'Migration Control Tower', icon: Radio, badge: 'LIVE', permissions: ['Project Manager', 'Migration Consultant', 'Data Engineer', 'Customer Administrator', 'Partner Administrator'] },
         { id: 'migration-replay', label: 'Migration Replay', icon: RotateCcw, badge: null, permissions: ['Project Manager', 'Migration Consultant', 'Data Engineer', 'Customer Administrator'] },
         { id: 'batch-processing', label: 'Batch Processing Engine', icon: Layers, badge: null, permissions: ['Data Engineer', 'Data Analyst'] },
         { id: 'global-load-balancer', label: 'Global Load Balancer', icon: Combine, badge: 'NEW', permissions: ['Data Engineer', 'Partner Administrator', 'Customer Administrator'] },

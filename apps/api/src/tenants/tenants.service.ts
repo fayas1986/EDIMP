@@ -31,7 +31,7 @@ export class TenantsService {
     return tenant;
   }
 
-  async findAll(user: RequestUser, query?: PaginationQueryDto): Promise<Tenant[] | PaginatedResult<Tenant>> {
+  async findAll(user: RequestUser, query?: PaginationQueryDto): Promise<PaginatedResult<Tenant>> {
     const where = {
       deletedAt: null,
       members: {
@@ -41,12 +41,8 @@ export class TenantsService {
       },
     };
 
-    if (!query?.page && !query?.pageSize) {
-      return this.prisma.tenant.findMany({ where });
-    }
-
-    const page = query.page || 1;
-    const pageSize = query.pageSize || 20;
+    const page = query?.page || 1;
+    const pageSize = query?.pageSize || 20;
 
     const [data, totalItems] = await Promise.all([
       this.prisma.tenant.findMany({
@@ -63,12 +59,12 @@ export class TenantsService {
         page,
         pageSize,
         totalItems,
-        totalPages: Math.ceil(totalItems / pageSize),
+        totalPages: Math.ceil(totalItems / pageSize) || 1,
       },
     };
   }
 
-  async findOne(id: string, user: RequestUser): Promise<any> {
+  async findOne(id: string, user: RequestUser): Promise<Tenant> {
     const tenant = await this.prisma.tenant.findFirst({
       where: { id, deletedAt: null },
       include: {
@@ -82,17 +78,23 @@ export class TenantsService {
       throw new NotFoundException(`Tenant with ID ${id} not found`);
     }
 
-    if (tenant.members.length === 0) {
+    if ((tenant as any).members.length === 0) {
       throw new ForbiddenException(`You do not have access to Tenant ${id}`);
     }
 
-    return tenant;
+    return {
+      id: tenant.id,
+      name: tenant.name,
+      createdAt: tenant.createdAt,
+      updatedAt: tenant.updatedAt,
+      deletedAt: tenant.deletedAt,
+    };
   }
 
   async update(id: string, updateTenantDto: UpdateTenantDto, user: RequestUser): Promise<Tenant> {
     const tenant = await this.findOne(id, user);
 
-    const member = tenant.members[0];
+    const member = (tenant as any).members[0];
     if (member.role !== 'ADMIN') {
       throw new ForbiddenException(`You must be an ADMIN to update Tenant ${id}`);
     }
@@ -115,7 +117,7 @@ export class TenantsService {
   async remove(id: string, user: RequestUser): Promise<Tenant> {
     const tenant = await this.findOne(id, user);
 
-    const member = tenant.members[0];
+    const member = (tenant as any).members[0];
     if (member.role !== 'ADMIN') {
       throw new ForbiddenException(`You must be an ADMIN to delete Tenant ${id}`);
     }

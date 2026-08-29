@@ -37,6 +37,7 @@ const DataDependencyExplorerView = React.lazy(() => import('./components/DataDep
 const AuditReportingView = React.lazy(() => import('./components/AuditReportingView').then(module => ({ default: module.AuditReportingView })));
 const ComplianceDashboardView = React.lazy(() => import('./components/ComplianceDashboardView').then(module => ({ default: module.ComplianceDashboardView })));
 const MigrationSimulationView = React.lazy(() => import('./components/MigrationSimulationView').then(module => ({ default: module.MigrationSimulationView })));
+const MigrationControlTowerView = React.lazy(() => import('./components/MigrationControlTowerView').then(module => ({ default: module.MigrationControlTowerView })));
 const MigrationReplayView = React.lazy(() => import('./components/MigrationReplayView').then(module => ({ default: module.MigrationReplayView })));
 const SchemaComparisonView = React.lazy(() => import('./components/SchemaComparisonView').then(module => ({ default: module.SchemaComparisonView })));
 const SchemaRegistryView = React.lazy(() => import('./components/SchemaRegistryView').then(module => ({ default: module.SchemaRegistryView })));
@@ -469,6 +470,10 @@ export function App() {
 
           <Route path="/simulation" element={
             <MigrationSimulationView onCommitFullMigration={() => setActiveTab('wizard')} />
+              } />
+
+          <Route path="/control-tower" element={
+            <MigrationControlTowerView />
               } />
 
           <Route path="/migration-replay" element={<MigrationReplayView connectors={connectors} />} />

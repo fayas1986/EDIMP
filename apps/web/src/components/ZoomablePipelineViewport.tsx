@@ -165,6 +165,7 @@ export const ZoomablePipelineViewport: React.FC<ZoomablePipelineViewportProps> =
               type="button"
               onClick={handleZoomOut}
               disabled={zoomLevel <= minZoom}
+              aria-label="Zoom Out"
               className={`p-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer disabled:opacity-30 ${
                 isDark
                   ? 'hover:bg-slate-800 text-slate-300 hover:text-white'
@@ -180,6 +181,7 @@ export const ZoomablePipelineViewport: React.FC<ZoomablePipelineViewportProps> =
               type="button"
               onClick={handleZoomIn}
               disabled={zoomLevel >= maxZoom}
+              aria-label="Zoom In"
               className={`p-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer disabled:opacity-30 ${
                 isDark
                   ? 'hover:bg-slate-800 text-slate-300 hover:text-white'
@@ -196,6 +198,7 @@ export const ZoomablePipelineViewport: React.FC<ZoomablePipelineViewportProps> =
             <button
               type="button"
               onClick={handleZoomToFit}
+              aria-label="Zoom to Fit Viewport"
               className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
                 isFitMode
                   ? 'bg-indigo-600 text-white shadow-3xs'
@@ -213,6 +216,7 @@ export const ZoomablePipelineViewport: React.FC<ZoomablePipelineViewportProps> =
             <button
               type="button"
               onClick={handleResetZoom}
+              aria-label="Reset Zoom"
               className={`p-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 isDark
                   ? 'hover:bg-slate-800 text-slate-400 hover:text-white'
@@ -227,6 +231,7 @@ export const ZoomablePipelineViewport: React.FC<ZoomablePipelineViewportProps> =
             <button
               type="button"
               onClick={() => setIsFullscreen(!isFullscreen)}
+              aria-label={isFullscreen ? 'Exit Full Viewport' : 'Expand Viewport Fullscreen'}
               className={`p-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 isDark
                   ? 'hover:bg-slate-800 text-slate-400 hover:text-white'

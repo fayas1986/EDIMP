@@ -7,9 +7,14 @@ import {
   Headers,
   HttpCode,
   HttpStatus,
+  UseGuards,
+  Query,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { AiAgentsService } from './ai-agents.service';
+import { AuthGuard, RequestUser } from '../common/auth/auth.guard';
+import { TenantWorkspaceGuard } from '../common/guards/tenant.guard';
+import { CurrentUser } from '../common/auth/current-user.decorator';
 import {
   TriggerAiMappingSuggestionDto,
   TriggerAiDriftRepairDto,
@@ -17,20 +22,31 @@ import {
   ExecuteNaturalLanguageQueryDto,
   AcceptAiSuggestionDto,
   RejectAiSuggestionDto,
+  PaginationQuerySchema,
+  PaginationQueryDto,
+  PaginatedResult,
+  AiAgentTaskResponse,
+  AsyncOperationResponse,
+  AcceptAiSuggestionResponse,
+  AiMappingSuggestionResponse,
+  ExecuteNaturalLanguageQueryResponse,
 } from '@edimp/contracts';
+import { ZodValidationPipe } from 'nestjs-zod';
 
 @ApiTags('AI Agents & Autonomous Skills')
 @Controller()
+@UseGuards(AuthGuard, TenantWorkspaceGuard)
 export class AiAgentsController {
   constructor(private readonly aiAgentsService: AiAgentsService) {}
 
   @Post('workspaces/:workspaceId/ai/mapping-suggestions')
+  @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({ summary: 'Trigger asynchronous mapping suggestion task with score breakdowns & provenance' })
-  @ApiResponse({ status: 201, description: 'AI agent task created or reused via idempotency hash' })
+  @ApiResponse({ status: 202, description: 'AI agent task created or reused via idempotency hash' })
   async triggerMappingSuggestions(
     @Param('workspaceId') workspaceId: string,
     @Body() dto: TriggerAiMappingSuggestionDto
-  ) {
+  ): Promise<AsyncOperationResponse> {
     return this.aiAgentsService.triggerMappingSuggestionTask(workspaceId, dto);
   }
 
@@ -40,13 +56,11 @@ export class AiAgentsController {
   @ApiResponse({ status: 200, description: 'Suggestion accepted and new draft version created' })
   async acceptSuggestion(
     @Param('suggestionId') suggestionId: string,
-    @Headers('x-workspace-id') workspaceHeader: string,
-    @Headers('x-user-id') userHeader: string,
+    @Headers('x-workspace-id') workspaceId: string,
+    @CurrentUser() user: RequestUser,
     @Body() dto: AcceptAiSuggestionDto
-  ) {
-    const workspaceId = workspaceHeader || 'ws_phase7_default';
-    const userId = userHeader || 'usr_phase7_default';
-    return this.aiAgentsService.acceptMappingSuggestion(workspaceId, suggestionId, userId, dto);
+  ): Promise<AcceptAiSuggestionResponse> {
+    return this.aiAgentsService.acceptMappingSuggestion(workspaceId, suggestionId, user.id, dto) as any;
   }
 
   @Post('ai-suggestions/:suggestionId/reject')
@@ -55,52 +69,56 @@ export class AiAgentsController {
   @ApiResponse({ status: 200, description: 'Suggestion rejected' })
   async rejectSuggestion(
     @Param('suggestionId') suggestionId: string,
-    @Headers('x-workspace-id') workspaceHeader: string,
-    @Headers('x-user-id') userHeader: string,
+    @Headers('x-workspace-id') workspaceId: string,
+    @CurrentUser() user: RequestUser,
     @Body() dto: RejectAiSuggestionDto
-  ) {
-    const workspaceId = workspaceHeader || 'ws_phase7_default';
-    const userId = userHeader || 'usr_phase7_default';
-    return this.aiAgentsService.rejectMappingSuggestion(workspaceId, suggestionId, userId, dto);
+  ): Promise<AiMappingSuggestionResponse> {
+    return this.aiAgentsService.rejectMappingSuggestion(workspaceId, suggestionId, user.id, dto) as any;
   }
 
   @Post('workspaces/:workspaceId/ai/schema-drift')
+  @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({ summary: 'Trigger schema drift repair agent (Detects renames, added/removed fields, computes severity)' })
-  @ApiResponse({ status: 201, description: 'Schema drift task created' })
+  @ApiResponse({ status: 202, description: 'Schema drift task created' })
   async triggerSchemaDrift(
     @Param('workspaceId') workspaceId: string,
     @Body() dto: TriggerAiDriftRepairDto
-  ) {
+  ): Promise<AsyncOperationResponse> {
     return this.aiAgentsService.triggerDriftRepairTask(workspaceId, dto);
   }
 
   @Post('workspaces/:workspaceId/ai/anomaly-analysis')
+  @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({ summary: 'Trigger anomaly detection agent (Enforces sufficient sample baseline)' })
-  @ApiResponse({ status: 201, description: 'Anomaly analysis task created' })
+  @ApiResponse({ status: 202, description: 'Anomaly analysis task created' })
   async triggerAnomalyAnalysis(
     @Param('workspaceId') workspaceId: string,
     @Body() dto: TriggerAiAnomalyAnalysisDto
-  ) {
+  ): Promise<AsyncOperationResponse> {
     return this.aiAgentsService.triggerAnomalyAnalysisTask(workspaceId, dto);
   }
 
   @Post('workspaces/:workspaceId/ai/query')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Execute read-only controlled natural language query (Zod validated query plan)' })
-  @ApiResponse({ status: 200, description: 'Read-only query results returned' })
+  @ApiOperation({ summary: 'Controlled Read-Only Natural Language Query Execution' })
+  @ApiResponse({ status: 200, description: 'Query results returned' })
   async executeNaturalLanguageQuery(
     @Param('workspaceId') workspaceId: string,
-    @Headers('x-user-id') userHeader: string,
+    @CurrentUser() user: RequestUser,
     @Body() dto: ExecuteNaturalLanguageQueryDto
-  ) {
-    const userId = userHeader || 'usr_phase7_default';
-    return this.aiAgentsService.executeNaturalLanguageQuery(workspaceId, userId, dto);
+  ): Promise<ExecuteNaturalLanguageQueryResponse> {
+    return this.aiAgentsService.executeNaturalLanguageQuery(workspaceId, user.id, dto) as any;
   }
 
   @Get('workspaces/:workspaceId/ai/tasks')
   @ApiOperation({ summary: 'List AI agent task execution history in workspace' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'pageSize', required: false, type: Number })
   @ApiResponse({ status: 200, description: 'List of AI agent tasks' })
-  async listWorkspaceTasks(@Param('workspaceId') workspaceId: string) {
-    return this.aiAgentsService.listWorkspaceTasks(workspaceId);
+  async listWorkspaceTasks(
+    @Param('workspaceId') workspaceId: string,
+    @Query(new ZodValidationPipe(PaginationQuerySchema)) query: PaginationQueryDto,
+  ): Promise<PaginatedResult<AiAgentTaskResponse>> {
+    return this.aiAgentsService.listWorkspaceTasks(workspaceId, query);
   }
 }

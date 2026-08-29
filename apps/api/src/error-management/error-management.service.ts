@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { MigrationEngineService } from '../migration-engine/migration-engine.service';
 import {
@@ -6,6 +6,12 @@ import {
   ResolveErrorOverrideDto,
   ResolveErrorReplayDto,
   BulkResolveErrorsDto,
+  PaginationQueryDto,
+  PaginatedResult,
+  RecordErrorResponse,
+  ErrorManualOverrideResponse,
+  ErrorReplayResponse,
+  BulkResolveErrorsResponse,
 } from '@edimp/contracts';
 import {
   ErrorResolutionStatus,
@@ -19,33 +25,101 @@ export class ErrorManagementService {
     private readonly migrationEngineService: MigrationEngineService
   ) {}
 
-  async listErrors(workspaceId: string, status?: ErrorResolutionStatus, category?: string) {
-    return this.prisma.recordError.findMany({
-      where: {
-        resolutionStatus: status ? status : undefined,
-        errorCategory: category ? (category as any) : undefined,
+  private async verifyErrorAccess(errorId: string, user: any) {
+    const error = await this.prisma.recordError.findUnique({
+      where: { id: errorId },
+      include: {
         migrationRecord: {
-          jobBatch: {
+          include: {
             migrationRun: {
-              migrationConfigVersion: {
-                migrationJob: {
-                  workspaceId,
+              include: {
+                migrationConfigVersion: {
+                  include: {
+                    migrationJob: {
+                      include: {
+                        workspace: {
+                          include: {
+                            members: {
+                              where: { userId: user.id },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
                 },
               },
             },
           },
         },
       },
-      include: {
-        migrationRecord: true,
-        manualOverride: true,
-        resolutionLogs: true,
-      },
-      orderBy: { createdAt: 'desc' },
     });
+
+    if (!error) {
+      throw new NotFoundException(`Record error ${errorId} not found`);
+    }
+
+    const hasAccess = error.migrationRecord.migrationRun.migrationConfigVersion.migrationJob.workspace.members.length > 0;
+    if (!hasAccess) {
+      throw new ForbiddenException(`User does not have access to RecordError ${errorId}`);
+    }
+
+    return error;
   }
 
-  async getErrorDetails(errorId: string) {
+  async listErrors(
+    workspaceId: string,
+    query?: PaginationQueryDto & { status?: ErrorResolutionStatus; category?: string }
+  ): Promise<PaginatedResult<RecordErrorResponse>> {
+    const page = query?.page || 1;
+    const pageSize = query?.pageSize || 20;
+    const status = query?.status;
+    const category = query?.category;
+
+    const where = {
+      resolutionStatus: status ? status : undefined,
+      errorCategory: category ? (category as any) : undefined,
+      migrationRecord: {
+        jobBatch: {
+          migrationRun: {
+            migrationConfigVersion: {
+              migrationJob: {
+                workspaceId,
+              },
+            },
+          },
+        },
+      },
+    };
+
+    const [data, totalItems] = await Promise.all([
+      this.prisma.recordError.findMany({
+        where,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: {
+          migrationRecord: true,
+          manualOverride: true,
+          resolutionLogs: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.recordError.count({ where }),
+    ]);
+
+    return {
+      data: data as any as RecordErrorResponse[],
+      pagination: {
+        page,
+        pageSize,
+        totalItems,
+        totalPages: Math.ceil(totalItems / pageSize) || 1,
+      },
+    };
+  }
+
+  async getErrorDetails(errorId: string, user: any): Promise<RecordErrorResponse> {
+    await this.verifyErrorAccess(errorId, user);
     const error = await this.prisma.recordError.findUnique({
       where: { id: errorId },
       include: {
@@ -59,10 +133,11 @@ export class ErrorManagementService {
       },
     });
     if (!error) throw new NotFoundException('Record error not found');
-    return error;
+    return error as any as RecordErrorResponse;
   }
 
-  async updateStatus(errorId: string, userId: string, dto: UpdateErrorStatusDto) {
+  async updateStatus(errorId: string, userId: string, dto: UpdateErrorStatusDto): Promise<RecordErrorResponse> {
+    await this.verifyErrorAccess(errorId, { id: userId });
     const error = await this.prisma.recordError.findUnique({ where: { id: errorId } });
     if (!error) throw new NotFoundException('Record error not found');
 
@@ -88,10 +163,11 @@ export class ErrorManagementService {
       },
     });
 
-    return updated;
+    return updated as any as RecordErrorResponse;
   }
 
-  async applyManualOverride(errorId: string, userId: string, dto: ResolveErrorOverrideDto) {
+  async applyManualOverride(errorId: string, userId: string, dto: ResolveErrorOverrideDto): Promise<ErrorManualOverrideResponse> {
+    await this.verifyErrorAccess(errorId, { id: userId });
     const error = await this.prisma.recordError.findUnique({
       where: { id: errorId },
       include: { migrationRecord: true, manualOverride: true },
@@ -139,10 +215,11 @@ export class ErrorManagementService {
       },
     });
 
-    return override;
+    return override as any as ErrorManualOverrideResponse;
   }
 
-  async replayError(errorId: string, userId: string, dto: ResolveErrorReplayDto) {
+  async replayError(errorId: string, userId: string, dto: ResolveErrorReplayDto): Promise<ErrorReplayResponse> {
+    await this.verifyErrorAccess(errorId, { id: userId });
     const error = await this.prisma.recordError.findUnique({
       where: { id: errorId },
       include: {
@@ -218,7 +295,7 @@ export class ErrorManagementService {
     return { errorId, status: toStatus, replayRunId: newRun.id };
   }
 
-  async bulkResolveErrors(userId: string, dto: BulkResolveErrorsDto) {
+  async bulkResolveErrors(userId: string, dto: BulkResolveErrorsDto): Promise<BulkResolveErrorsResponse> {
     const results = [];
     for (const errorId of dto.recordErrorIds) {
       if (dto.action === ErrorResolutionAction.REPLAY) {

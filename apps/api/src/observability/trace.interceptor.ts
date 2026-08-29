@@ -5,7 +5,7 @@ import {
   CallHandler,
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
-import { tap } from 'rxjs/operators';
+import { map, tap } from 'rxjs/operators';
 import { ObservabilityService } from './observability.service';
 import * as crypto from 'crypto';
 
@@ -60,6 +60,15 @@ export class TraceInterceptor implements NestInterceptor {
     const url = req.route ? req.route.path : req.url;
 
     return next.handle().pipe(
+      map(data => {
+        if (data && typeof data === 'object' && 'id' in data && 'status' in data && !('traceId' in data)) {
+          return {
+            ...data,
+            traceId,
+          };
+        }
+        return data;
+      }),
       tap({
         next: () => {
           const duration = Date.now() - startTime;

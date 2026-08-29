@@ -102,6 +102,7 @@ describe('Phase 1 E2E Isolation Tests', () => {
     it('should create a tenant and add user as OWNER', async () => {
       const response = await request(app.getHttpServer())
         .post('/api/v1/tenants')
+        .set('x-user-id', user1.id)
         .send({ name: 'E2E Test Tenant' })
         .expect(201);
 
@@ -117,6 +118,7 @@ describe('Phase 1 E2E Isolation Tests', () => {
     it('should prevent duplicate tenant names', async () => {
       await request(app.getHttpServer())
         .post('/api/v1/tenants')
+        .set('x-user-id', user1.id)
         .send({ name: 'E2E Test Tenant' })
         .expect(409);
     });

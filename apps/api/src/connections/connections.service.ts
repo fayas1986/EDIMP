@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestUser } from '../common/auth/auth.guard';
-import { CreateConnectionDto, UpdateConnectionDto, TestConnectionResult, PaginationQueryDto, PaginatedResult } from '@edimp/contracts';
+import { CreateConnectionDto, UpdateConnectionDto, TestConnectionResult, PaginationQueryDto, PaginatedResult, ConnectionResponse } from '@edimp/contracts';
 
 @Injectable()
 export class ConnectionsService {
@@ -43,16 +43,21 @@ export class ConnectionsService {
   }
 
   // Sanitizes connection output to obscure/remove sensitive credential reference details
-  private sanitizeConnection(connection: any) {
-    const { credential, ...rest } = connection;
+  private sanitizeConnection(connection: any): ConnectionResponse {
     return {
-      ...rest,
-      hasCredential: !!credential,
-      credentialType: credential?.credentialType || null,
+      id: connection.id,
+      environmentId: connection.environmentId,
+      connectorTypeId: connection.connectorTypeId,
+      name: connection.name,
+      description: connection.description,
+      status: connection.status,
+      createdAt: connection.createdAt,
+      updatedAt: connection.updatedAt,
+      deletedAt: connection.deletedAt,
     };
   }
 
-  async create(environmentId: string, dto: CreateConnectionDto, user: RequestUser) {
+  async create(environmentId: string, dto: CreateConnectionDto, user: RequestUser): Promise<ConnectionResponse> {
     await this.verifyEnvironmentAccess(environmentId, user.id);
 
     const existing = await this.prisma.connection.findFirst({
@@ -93,7 +98,7 @@ export class ConnectionsService {
     return this.sanitizeConnection(connection);
   }
 
-  async findAll(environmentId: string, user: RequestUser, query?: PaginationQueryDto): Promise<any[] | PaginatedResult<any>> {
+  async findAll(environmentId: string, user: RequestUser, query?: PaginationQueryDto): Promise<PaginatedResult<ConnectionResponse>> {
     await this.verifyEnvironmentAccess(environmentId, user.id);
 
     const where = {
@@ -101,19 +106,8 @@ export class ConnectionsService {
       deletedAt: null,
     };
 
-    if (!query?.page && !query?.pageSize) {
-      const connections = await this.prisma.connection.findMany({
-        where,
-        include: {
-          connectorType: true,
-          credential: true,
-        },
-      });
-      return connections.map(c => this.sanitizeConnection(c));
-    }
-
-    const page = query.page || 1;
-    const pageSize = query.pageSize || 20;
+    const page = query?.page || 1;
+    const pageSize = query?.pageSize || 20;
 
     const [connections, totalItems] = await Promise.all([
       this.prisma.connection.findMany({
@@ -134,12 +128,12 @@ export class ConnectionsService {
         page,
         pageSize,
         totalItems,
-        totalPages: Math.ceil(totalItems / pageSize),
+        totalPages: Math.ceil(totalItems / pageSize) || 1,
       },
     };
   }
 
-  async findOne(id: string, user: RequestUser) {
+  async findOne(id: string, user: RequestUser): Promise<ConnectionResponse> {
     const connection = await this.prisma.connection.findFirst({
       where: { id, deletedAt: null },
       include: {
@@ -158,7 +152,7 @@ export class ConnectionsService {
     return this.sanitizeConnection(connection);
   }
 
-  async update(id: string, dto: UpdateConnectionDto, user: RequestUser) {
+  async update(id: string, dto: UpdateConnectionDto, user: RequestUser): Promise<ConnectionResponse> {
     const connection = await this.findOne(id, user);
 
     if (dto.name && dto.name !== connection.name) {
@@ -202,7 +196,16 @@ export class ConnectionsService {
   }
 
   async testConnection(id: string, user: RequestUser): Promise<TestConnectionResult> {
-    const connection = await this.findOne(id, user);
+    await this.findOne(id, user);
+
+    const connection = await this.prisma.connection.findUnique({
+      where: { id },
+      include: { connectorType: true },
+    });
+
+    if (!connection) {
+      throw new NotFoundException(`Connection ${id} not found`);
+    }
 
     const startTime = Date.now();
     if (connection.connectorType.status === 'SUNSET') {

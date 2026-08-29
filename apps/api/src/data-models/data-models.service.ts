@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestUser } from '../common/auth/auth.guard';
-import { CreateDataModelDto, UpdateDataModelDto, PaginationQueryDto, PaginatedResult, DataModel } from '@edimp/contracts';
+import { CreateDataModelDto, UpdateDataModelDto, PaginationQueryDto, PaginatedResult, DataModelResponse, DataModelVersionResponse } from '@edimp/contracts';
 import { DataModelDiscoveryService } from './data-model-discovery.service';
 
 @Injectable()
@@ -47,7 +47,7 @@ export class DataModelsService {
     return connection;
   }
 
-  async create(connectionId: string, dto: CreateDataModelDto, user: RequestUser) {
+  async create(connectionId: string, dto: CreateDataModelDto, user: RequestUser): Promise<DataModelResponse> {
     const connection = await this.verifyConnectionAccess(connectionId, user.id);
 
     const existing = await this.prisma.dataModel.findFirst({
@@ -80,7 +80,7 @@ export class DataModelsService {
       }));
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const dataModel = await tx.dataModel.create({
         data: {
           connectionId,
@@ -123,6 +123,7 @@ export class DataModelsService {
         where: { id: dataModel.id },
         include: {
           versions: {
+            orderBy: { version: 'desc' },
             include: {
               entities: {
                 include: {
@@ -134,27 +135,21 @@ export class DataModelsService {
         },
       });
     });
+
+    if (!result) {
+      throw new NotFoundException(`DataModel not found after creation`);
+    }
+
+    return result as DataModelResponse;
   }
 
-  async findAll(connectionId: string, user: RequestUser, query?: PaginationQueryDto): Promise<any[] | PaginatedResult<any>> {
+  async findAll(connectionId: string, user: RequestUser, query?: PaginationQueryDto): Promise<PaginatedResult<DataModelResponse>> {
     await this.verifyConnectionAccess(connectionId, user.id);
 
     const where = { connectionId, deletedAt: null };
 
-    if (!query?.page && !query?.pageSize) {
-      return this.prisma.dataModel.findMany({
-        where,
-        include: {
-          versions: {
-            orderBy: { version: 'desc' },
-            take: 1,
-          },
-        },
-      });
-    }
-
-    const page = query.page || 1;
-    const pageSize = query.pageSize || 20;
+    const page = query?.page || 1;
+    const pageSize = query?.pageSize || 20;
 
     const [data, totalItems] = await Promise.all([
       this.prisma.dataModel.findMany({
@@ -165,6 +160,13 @@ export class DataModelsService {
           versions: {
             orderBy: { version: 'desc' },
             take: 1,
+            include: {
+              entities: {
+                include: {
+                  fields: true,
+                },
+              },
+            },
           },
         },
       }),
@@ -172,17 +174,17 @@ export class DataModelsService {
     ]);
 
     return {
-      data,
+      data: data as DataModelResponse[],
       pagination: {
         page,
         pageSize,
         totalItems,
-        totalPages: Math.ceil(totalItems / pageSize),
+        totalPages: Math.ceil(totalItems / pageSize) || 1,
       },
     };
   }
 
-  async findOne(id: string, user: RequestUser) {
+  async findOne(id: string, user: RequestUser): Promise<DataModelResponse> {
     const dataModel = await this.prisma.dataModel.findFirst({
       where: { id, deletedAt: null },
       include: {
@@ -209,15 +211,15 @@ export class DataModelsService {
     return dataModel;
   }
 
-  async updateDraft(id: string, dto: UpdateDataModelDto, user: RequestUser) {
+  async updateDraft(id: string, dto: UpdateDataModelDto, user: RequestUser): Promise<DataModelResponse> {
     const dataModel = await this.findOne(id, user);
 
-    const latestVersion = dataModel.versions[0];
+    const latestVersion = (dataModel as any).versions[0];
     if (!latestVersion || latestVersion.status !== 'DRAFT') {
       throw new BadRequestException(`Cannot update DataModel ${id}: no DRAFT version exists. Create a new draft first.`);
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       if (dto.name) {
         await tx.dataModel.update({
           where: { id },
@@ -269,12 +271,18 @@ export class DataModelsService {
         },
       });
     });
+
+    if (!result) {
+      throw new NotFoundException(`DataModel not found after update`);
+    }
+
+    return result as DataModelResponse;
   }
 
-  async publishVersion(dataModelId: string, versionId: string, user: RequestUser) {
+  async publishVersion(dataModelId: string, versionId: string, user: RequestUser): Promise<DataModelVersionResponse> {
     const dataModel = await this.findOne(dataModelId, user);
 
-    const targetVersion = dataModel.versions.find(v => v.id === versionId);
+    const targetVersion = (dataModel as any).versions.find((v: any) => v.id === versionId);
     if (!targetVersion) {
       throw new NotFoundException(`DataModelVersion ${versionId} not found for DataModel ${dataModelId}`);
     }

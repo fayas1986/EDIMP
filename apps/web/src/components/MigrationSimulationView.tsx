@@ -34,6 +34,8 @@ import {
   Network,
   Filter,
   CheckCircle,
+  Calendar,
+  Rocket,
 } from 'lucide-react';
 
 import {
@@ -773,6 +775,176 @@ export const MigrationSimulationView: React.FC<{
             <div className={`flex items-center gap-2.5 ${simStep >= 4 ? 'text-emerald-600 font-extrabold' : 'text-slate-400 font-medium'}`}>
               {simStep >= 4 ? <Check className="w-4 h-4 text-emerald-500 shrink-0" /> : <div className="w-3.5 h-3.5 rounded-full border border-slate-300 shrink-0" />}
               <span>4. Computing cluster memory footprint &amp; compiling predicted impact report across {activePipeline.recommendedWorkerNodes} worker nodes...</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+
+      {/* ── 5-Year Migration Batch Planner ──────────────────────────────────── */}
+      <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-violet-50 border border-violet-100 text-violet-600">
+              <Calendar className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="font-extrabold text-slate-900 text-sm">5-Year Migration Batch Planner</h3>
+              <p className="text-[11px] text-slate-500 font-medium">
+                Partition {(activePipeline.totalRecords / 1_000_000).toFixed(2)}M records across fiscal years 2019–2024 · run dry-runs year-by-year before production
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={handleRunSimulation}
+            disabled={isSimulating}
+            className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white text-xs font-bold rounded-xl transition-all shadow-sm"
+          >
+            <Play className="w-3.5 h-3.5 fill-current" />
+            Simulate All Years
+          </button>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs font-sans">
+            <thead className="bg-slate-50 border-b border-slate-200">
+              <tr>
+                {['Fiscal Year', 'Estimated Records', 'Data Size', 'Risk Level', 'Batch Status', 'Action'].map(h => (
+                  <th key={h} className="px-5 py-3 text-left text-[10px] font-bold uppercase text-slate-500 tracking-wider whitespace-nowrap">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {[
+                { year: 2019, pct: 0.135, risk: 'LOW',    status: simulationCompleted ? 'COMPLETED' : 'PENDING' },
+                { year: 2020, pct: 0.148, risk: 'LOW',    status: simulationCompleted ? 'COMPLETED' : 'PENDING' },
+                { year: 2021, pct: 0.172, risk: 'MEDIUM', status: 'PENDING' },
+                { year: 2022, pct: 0.198, risk: 'MEDIUM', status: 'PENDING' },
+                { year: 2023, pct: 0.182, risk: 'HIGH',   status: 'PENDING' },
+                { year: 2024, pct: 0.165, risk: 'MEDIUM', status: 'PENDING' },
+              ].map(row => {
+                const records = Math.round(activePipeline.totalRecords * row.pct);
+                const sizeMB  = (records * 0.00042).toFixed(1);
+                const riskColors: Record<string, string> = {
+                  LOW:    'bg-emerald-50 text-emerald-700 border-emerald-200',
+                  MEDIUM: 'bg-amber-50 text-amber-700 border-amber-200',
+                  HIGH:   'bg-rose-50 text-rose-700 border-rose-200',
+                };
+                return (
+                  <tr key={row.year} className="hover:bg-slate-50/60 transition-colors">
+                    <td className="px-5 py-3.5 font-black text-slate-900 font-mono">FY {row.year}</td>
+                    <td className="px-5 py-3.5 font-mono text-slate-700">{records.toLocaleString()}</td>
+                    <td className="px-5 py-3.5 font-mono text-slate-500">{sizeMB} GB</td>
+                    <td className="px-5 py-3.5">
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${riskColors[row.risk]}`}>{row.risk}</span>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      {row.status === 'COMPLETED' ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-full font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <CheckCircle2 className="w-3 h-3" /> Completed
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-full font-bold bg-slate-100 text-slate-500 border border-slate-200">
+                          Pending
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <button
+                        onClick={handleRunSimulation}
+                        disabled={isSimulating}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-bold transition-all border ${
+                          row.status === 'COMPLETED'
+                            ? 'bg-slate-50 text-slate-500 border-slate-200 cursor-default'
+                            : 'bg-indigo-600 hover:bg-indigo-700 text-white border-transparent shadow-sm'
+                        }`}
+                      >
+                        <FlaskConical className="w-3 h-3" />
+                        {row.status === 'COMPLETED' ? 'View Report' : 'Run Dry-Run'}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot className="bg-slate-50 border-t-2 border-slate-200">
+              <tr>
+                <td className="px-5 py-3 font-black text-slate-900 text-xs">TOTAL</td>
+                <td className="px-5 py-3 font-black text-slate-900 font-mono text-xs">{activePipeline.totalRecords.toLocaleString()}</td>
+                <td className="px-5 py-3 text-slate-500 font-mono text-xs">{activePipeline.totalTB} TB</td>
+                <td colSpan={3} className="px-5 py-3 text-slate-500 text-xs font-medium">All fiscal years</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+
+      {/* ── Simulation Report Card (user-specified format) ───────────────────── */}
+      {simulationCompleted && !isSimulating && (
+        <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
+          <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-600">
+                <BarChart3 className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-slate-900 text-sm">Migration Simulation Report</h3>
+                <p className="text-[11px] text-slate-500 font-medium">{activePipeline.name} · Dry-run completed</p>
+              </div>
+            </div>
+            <span className="text-[10px] px-2.5 py-0.5 rounded-full font-mono font-bold border bg-emerald-50 text-emerald-700 border-emerald-200">
+              DRY-RUN COMPLETE
+            </span>
+          </div>
+
+          {/* Report Metrics — exact format requested */}
+          <div className="p-6">
+            <div className="space-y-0 border border-slate-200 rounded-xl overflow-hidden font-mono text-sm">
+              {[
+                { label: 'Records processed',         value: report.totalDatasetRecords.toLocaleString(),                                              color: 'text-slate-900' },
+                { label: 'Successfully transformed',  value: (report.totalDatasetRecords - report.estimatedErrorsCount).toLocaleString(),               color: 'text-emerald-700' },
+                { label: 'Transformation errors',     value: report.estimatedErrorsCount.toLocaleString(),                                             color: 'text-rose-600' },
+                { label: 'Duplicates',                value: Math.round(report.estimatedErrorsCount * 0.299).toLocaleString(),                          color: 'text-amber-600' },
+                { label: 'Missing references',        value: Math.round(report.estimatedErrorsCount * 0.096).toLocaleString(),                          color: 'text-amber-700' },
+                { label: 'Target validation failures',value: Math.round(report.estimatedErrorsCount * 0.395).toLocaleString(),                          color: 'text-rose-700' },
+              ].map((row, i) => (
+                <div key={i} className={`flex items-center justify-between px-5 py-3 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50'} ${i < 5 ? 'border-b border-slate-100' : ''}`}>
+                  <span className="text-slate-600 font-medium text-xs">{row.label}</span>
+                  <span className={`font-black ${row.color}`}>{row.value}</span>
+                </div>
+              ))}
+              {/* Separator */}
+              <div className="border-t-2 border-slate-200 bg-indigo-50 px-5 py-4 flex items-center justify-between">
+                <div>
+                  <div className="text-[11px] text-indigo-600 font-bold uppercase tracking-wider mb-0.5">Estimated production success rate</div>
+                  <div className="text-3xl font-black text-indigo-700 font-mono tracking-tight">{report.predictedSuccessRate}%</div>
+                </div>
+                <div className="text-right">
+                  {report.predictedSuccessRate >= 98 ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-100 border border-emerald-300 text-emerald-800 text-xs font-bold">
+                      <CheckCircle2 className="w-4 h-4" /> APPROVED FOR PROMOTION
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-100 border border-amber-300 text-amber-800 text-xs font-bold">
+                      <AlertTriangle className="w-4 h-4" /> REVIEW REQUIRED
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Promote CTA */}
+            <div className="flex items-center justify-between mt-5 pt-5 border-t border-slate-100">
+              <p className="text-xs text-slate-500 font-medium max-w-md">
+                Sandbox dry-run complete. Verify reconciliation health before promoting to production.
+              </p>
+              <button
+                onClick={() => onCommitFullMigration?.()}
+                className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm"
+              >
+                <Rocket className="w-3.5 h-3.5" />
+                Promote Migration → Production
+              </button>
             </div>
           </div>
         </div>

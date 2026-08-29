@@ -1,14 +1,15 @@
 import { Controller, Get, Post, Body, Patch, Param, Query, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
 import { PipelineJobsService } from './pipeline-jobs.service';
 import { AuthGuard, RequestUser } from '../common/auth/auth.guard';
+import { TenantWorkspaceGuard } from '../common/guards/tenant.guard';
 import { CurrentUser } from '../common/auth/current-user.decorator';
-import { CreatePipelineJobSchema, PreviewTransformSchema, PaginationQuerySchema, PaginationQueryDto, PaginatedResult } from '@edimp/contracts';
+import { CreatePipelineJobSchema, PreviewTransformSchema, PaginationQuerySchema, PaginationQueryDto, PaginatedResult, PipelineJobResponse, PipelineExecutionRunResponse, AsyncOperationResponse, PreviewTransformResponse, CreatePipelineJobDto, PreviewTransformDto } from '@edimp/contracts';
 import { ZodValidationPipe } from 'nestjs-zod';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 
 @ApiTags('pipeline-jobs')
 @Controller()
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, TenantWorkspaceGuard)
 export class PipelineJobsController {
   constructor(private readonly pipelineJobsService: PipelineJobsService) {}
 
@@ -20,9 +21,9 @@ export class PipelineJobsController {
   @ApiResponse({ status: 409, description: 'Conflict - Name already exists in Workspace' })
   create(
     @Param('workspaceId') workspaceId: string,
-    @Body(new ZodValidationPipe(CreatePipelineJobSchema)) dto: any,
+    @Body(new ZodValidationPipe(CreatePipelineJobSchema)) dto: CreatePipelineJobDto,
     @CurrentUser() user: RequestUser,
-  ): Promise<any> {
+  ): Promise<PipelineJobResponse> {
     return this.pipelineJobsService.create(workspaceId, dto, user);
   }
 
@@ -36,7 +37,7 @@ export class PipelineJobsController {
     @Param('workspaceId') workspaceId: string,
     @Query(new ZodValidationPipe(PaginationQuerySchema)) query: PaginationQueryDto,
     @CurrentUser() user: RequestUser,
-  ): Promise<any[] | PaginatedResult<any>> {
+  ): Promise<PaginatedResult<PipelineJobResponse>> {
     return this.pipelineJobsService.findAll(workspaceId, user, query);
   }
 
@@ -48,9 +49,9 @@ export class PipelineJobsController {
   @ApiResponse({ status: 403, description: 'Forbidden - User does not have access to Workspace' })
   preview(
     @Param('workspaceId') workspaceId: string,
-    @Body(new ZodValidationPipe(PreviewTransformSchema)) dto: any,
+    @Body(new ZodValidationPipe(PreviewTransformSchema)) dto: PreviewTransformDto,
     @CurrentUser() user: RequestUser,
-  ): Promise<any> {
+  ): Promise<PreviewTransformResponse> {
     return this.pipelineJobsService.preview(workspaceId, dto, user);
   }
 
@@ -58,20 +59,21 @@ export class PipelineJobsController {
   @ApiOperation({ summary: 'Get PipelineJob details by ID' })
   @ApiResponse({ status: 200, description: 'PipelineJob details' })
   @ApiResponse({ status: 404, description: 'PipelineJob not found' })
-  findOne(@Param('id') id: string, @CurrentUser() user: RequestUser): Promise<any> {
+  findOne(@Param('id') id: string, @CurrentUser() user: RequestUser): Promise<PipelineJobResponse> {
     return this.pipelineJobsService.findOne(id, user);
   }
 
   @Post('pipeline-jobs/:id/execute')
+  @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({ summary: 'Trigger production execution run for a PipelineJob (requires PUBLISHED versions)' })
-  @ApiResponse({ status: 201, description: 'Execution run queued successfully' })
+  @ApiResponse({ status: 202, description: 'Execution run queued successfully' })
   @ApiResponse({ status: 400, description: 'Job versions are not PUBLISHED' })
   @ApiResponse({ status: 404, description: 'PipelineJob not found' })
   executeRun(
     @Param('id') id: string,
-    @Body() body: any,
+    @Body() body: { records?: Record<string, any>[]; lookupTables?: Record<string, Record<string, any>> },
     @CurrentUser() user: RequestUser,
-  ): Promise<any> {
+  ): Promise<AsyncOperationResponse> {
     return this.pipelineJobsService.executeRun(id, user, body);
   }
 
@@ -85,7 +87,7 @@ export class PipelineJobsController {
     @Param('id') id: string,
     @Query(new ZodValidationPipe(PaginationQuerySchema)) query: PaginationQueryDto,
     @CurrentUser() user: RequestUser,
-  ): Promise<any[] | PaginatedResult<any>> {
+  ): Promise<PaginatedResult<PipelineExecutionRunResponse>> {
     return this.pipelineJobsService.findRuns(id, user, query);
   }
 }

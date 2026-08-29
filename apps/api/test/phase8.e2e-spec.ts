@@ -3,6 +3,7 @@ import { INestApplication, ServiceUnavailableException } from '@nestjs/common';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { cleanDatabase } from './cleanup';
 import { ObservabilityService } from '../src/observability/observability.service';
 import { WorkerClusterService } from '../src/worker-cluster/worker-cluster.service';
 import { HealthService } from '../src/health/health.service';
@@ -38,72 +39,7 @@ describe('Phase 8: Enterprise Observability, Scale & Operational Hardening (E2E)
     configService = app.get(ConfigService);
 
     // CLEANUP DATABASE
-    await prisma.auditLog.deleteMany();
-    await prisma.workerNode.deleteMany();
-
-    await prisma.aiQueryMessage.deleteMany();
-    await prisma.aiQuerySession.deleteMany();
-    await prisma.aiAnomalyAnalysis.deleteMany();
-    await prisma.aiDriftRepairSuggestion.deleteMany();
-    await prisma.aiMappingSuggestion.deleteMany();
-    await prisma.aiAgentTask.deleteMany();
-
-    await prisma.errorResolutionLog.deleteMany();
-    await prisma.errorManualOverride.deleteMany();
-    await prisma.recordError.deleteMany();
-    await prisma.reconciliationObservation.deleteMany();
-    await prisma.reconciliationDiscrepancy.deleteMany();
-    await prisma.reconciliationBatch.deleteMany();
-    await prisma.reconciliationRun.deleteMany();
-    await prisma.reconciliationConfigurationVersion.deleteMany();
-    await prisma.reconciliationJob.deleteMany();
-
-    await prisma.migrationRecord.deleteMany();
-    await prisma.jobBatch.deleteMany();
-    await prisma.migrationRun.deleteMany();
-    await prisma.migrationIdentity.deleteMany();
-    await prisma.migrationConfigurationVersion.deleteMany();
-    await prisma.migrationJob.deleteMany();
-
-    await prisma.pipelineExecutionLog.deleteMany();
-    await prisma.pipelineExecutionRun.deleteMany();
-    await prisma.pipelineJob.deleteMany();
-
-    await prisma.fieldValidationRule.deleteMany();
-    await prisma.validationVersion.deleteMany();
-    await prisma.validationSet.deleteMany();
-
-    await prisma.fieldTransformation.deleteMany();
-    await prisma.transformationVersion.deleteMany();
-    await prisma.transformationSet.deleteMany();
-
-    await prisma.fieldMapping.deleteMany();
-    await prisma.entityMapping.deleteMany();
-    await prisma.mappingVersion.deleteMany();
-    await prisma.mappingSet.deleteMany();
-
-    await prisma.canonicalField.deleteMany();
-    await prisma.canonicalEntity.deleteMany();
-    await prisma.canonicalModelVersion.deleteMany();
-    await prisma.canonicalModel.deleteMany();
-
-    await prisma.dataProfileMetric.deleteMany();
-    await prisma.dataProfileRun.deleteMany();
-    await prisma.dataField.deleteMany();
-    await prisma.dataEntity.deleteMany();
-    await prisma.dataModelVersion.deleteMany();
-    await prisma.dataModel.deleteMany();
-
-    await prisma.credentialReference.deleteMany();
-    await prisma.connection.deleteMany();
-    await prisma.connectorType.deleteMany();
-
-    await prisma.environment.deleteMany();
-    await prisma.workspaceMember.deleteMany();
-    await prisma.workspace.deleteMany();
-    await prisma.tenantMember.deleteMany();
-    await prisma.tenant.deleteMany();
-    await prisma.user.deleteMany();
+    await cleanDatabase(prisma);
 
     // SEED BASE TEST DATA
     const user = await prisma.user.create({
@@ -164,9 +100,10 @@ describe('Phase 8: Enterprise Observability, Scale & Operational Hardening (E2E)
 
   describe('2. Prometheus Metrics Security & Low-Cardinality Enforcement', () => {
     it('Scenario 3: Exposes Prometheus metrics format at /api/v1/metrics with token authentication', async () => {
+      const token = configService.get<string>('METRICS_AUTH_TOKEN') || 'edimp_metrics_secret_token';
       const res = await request(app.getHttpServer())
         .get('/api/v1/metrics')
-        .set('x-metrics-token', 'edimp_metrics_secret_token')
+        .set('x-metrics-token', token)
         .expect(200);
 
       expect(res.text).toContain('# HELP edimp_http_requests_total');
@@ -181,9 +118,10 @@ describe('Phase 8: Enterprise Observability, Scale & Operational Hardening (E2E)
         .set('x-user-id', userId)
         .expect(200);
 
+      const token = configService.get<string>('METRICS_AUTH_TOKEN') || 'edimp_metrics_secret_token';
       const metricsRes = await request(app.getHttpServer())
         .get('/api/v1/metrics')
-        .set('x-metrics-token', 'edimp_metrics_secret_token')
+        .set('x-metrics-token', token)
         .expect(200);
 
       const text = metricsRes.text;
@@ -203,9 +141,10 @@ describe('Phase 8: Enterprise Observability, Scale & Operational Hardening (E2E)
       observabilityService.setGauge('edimp_queue_depth', 5, { queue_name: 'migration_queue' });
       observabilityService.incrementCounter('edimp_connector_operations_total', { connector_type: 'POSTGRES', operation: 'EXTRACT', status: 'SUCCESS' });
 
+      const token = configService.get<string>('METRICS_AUTH_TOKEN') || 'edimp_metrics_secret_token';
       const res = await request(app.getHttpServer())
         .get('/api/v1/metrics')
-        .set('x-metrics-token', 'edimp_metrics_secret_token')
+        .set('x-metrics-token', token)
         .expect(200);
 
       expect(res.text).toContain('edimp_queue_depth');
@@ -322,6 +261,7 @@ describe('Phase 8: Enterprise Observability, Scale & Operational Hardening (E2E)
     it('Scenario 14: Registers worker heartbeat in WorkerNode health table', async () => {
       const res = await request(app.getHttpServer())
         .post('/api/v1/worker-nodes/heartbeat')
+        .set('x-internal-service-token', 'edimp_internal_secret_token_2026')
         .send({
           workerId: testWorkerId,
           hostname: 'worker-node-p8-01',
@@ -437,11 +377,18 @@ describe('Phase 8: Enterprise Observability, Scale & Operational Hardening (E2E)
       // 2. Replay DLQ Item via API
       const replayRes = await request(app.getHttpServer())
         .post(`/api/v1/worker-nodes/dlq/${originalBatch.id}/replay`)
+        .set('x-internal-service-token', 'edimp_internal_secret_token_2026')
         .expect(202);
 
-      expect(replayRes.body.recoveryRunId).toBeDefined();
-      expect(replayRes.body.recoveryRunId).not.toBe(originalRun.id); // NEW recovery run context
-      expect(replayRes.body.originalBatchId).toBe(originalBatch.id);
+      expect(replayRes.body.id).toBeDefined();
+      expect(replayRes.body.id).not.toBe(originalRun.id); // NEW recovery run context
+
+      // Verify recovery batch matches original batch index and references original batch
+      const recoveryBatch = await prisma.jobBatch.findFirst({
+        where: { migrationRunId: replayRes.body.id },
+      });
+      expect(recoveryBatch).toBeDefined();
+      expect(recoveryBatch?.checkpointCursor).toBe(`RECOVERY_FROM:${originalBatch.id}`);
 
       // Verify original batch history remains intact (FAILED with DLQ_PARKED cursor)
       const fetchedOriginal = await prisma.jobBatch.findUnique({ where: { id: originalBatch.id } });
